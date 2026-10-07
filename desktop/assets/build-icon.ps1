@@ -2,26 +2,25 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $images = [Collections.Generic.List[byte[]]]::new()
 $sizes = @(16, 24, 32, 48, 64, 128, 256)
-foreach ($size in $sizes) {
-    $bitmap = [Drawing.Bitmap]::new($size, $size)
-    $graphics = [Drawing.Graphics]::FromImage($bitmap)
-    $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $graphics.ScaleTransform($size / 32.0, $size / 32.0)
-    $path = [Drawing.Drawing2D.GraphicsPath]::new()
-    foreach ($arc in @(@(0,0,180),@(18,0,270),@(18,18,0),@(0,18,90))) {
-        $path.AddArc([single]$arc[0], [single]$arc[1], 14, 14, [single]$arc[2], 90)
+$source = [Drawing.Image]::FromFile((Join-Path $PSScriptRoot 'logo.png'))
+try {
+    foreach ($size in $sizes) {
+        $bitmap = [Drawing.Bitmap]::new($size, $size)
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        $stream = [IO.MemoryStream]::new()
+        try {
+            $graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
+            $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $graphics.DrawImage($source, [Drawing.Rectangle]::new(0, 0, $size, $size))
+            $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+            $images.Add($stream.ToArray())
+            if ($size -eq 256) {
+                [IO.File]::WriteAllBytes((Join-Path $PSScriptRoot '../../website/dist/logo.png'), $stream.ToArray())
+            }
+        } finally { $stream.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
     }
-    $path.CloseFigure()
-    $brush = [Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(27,59,255))
-    $graphics.FillPath($brush, $path)
-    $pen = [Drawing.Pen]::new([Drawing.Color]::White, 3.5)
-    $pen.StartCap = $pen.EndCap = [Drawing.Drawing2D.LineCap]::Round
-    $graphics.DrawArc($pen, 8, 8, 16, 16, 40, 280)
-    $stream = [IO.MemoryStream]::new()
-    $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
-    $images.Add($stream.ToArray())
-    $stream.Dispose(); $pen.Dispose(); $brush.Dispose(); $path.Dispose(); $graphics.Dispose(); $bitmap.Dispose()
-}
+} finally { $source.Dispose() }
 $output = [IO.File]::Create((Join-Path $PSScriptRoot 'CursorCue.ico'))
 $writer = [IO.BinaryWriter]::new($output)
 try {
@@ -37,3 +36,4 @@ try {
     }
     foreach ($bytes in $images) { $writer.Write($bytes) }
 } finally { $writer.Dispose(); $output.Dispose() }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CursorCue.ico') -Destination (Join-Path $PSScriptRoot '../../website/dist/favicon.ico') -Force

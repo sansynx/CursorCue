@@ -1,25 +1,26 @@
 <p align="center">
-  <img src="desktop/assets/logo.svg" width="72" height="72" alt="CursorCue logo" />
+  <img src="desktop/assets/logo.png" width="72" height="72" alt="CursorCue logo" />
 </p>
 <h1 align="center">CursorCue</h1>
 <p align="center">Control the cursor others see while your mouse keeps working.</p>
 <p align="center">Windows screen sharing for one-on-ones, team calls, reviews, walkthroughs, and presentations.</p>
+<p align="center"><a href="https://cursorcue.pages.dev/">Visit the website</a></p>
 <p align="center">
-  <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.5/CursorCueSetup.exe">Download setup EXE</a> ·
-  <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.5/CursorCue.msi">Download MSI</a> ·
-  <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.5/CursorCue.exe">Download portable EXE</a>
+  <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.6/CursorCueSetup.exe">Download setup EXE</a> ·
+  <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.6/CursorCue.msi">Download MSI</a> ·
+  <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.6/CursorCue.exe">Download portable EXE</a>
 </p>
-<p align="center"><img src="docs/assets/cursorcue.png" alt="CursorCue Share application with setup instructions and controls" width="960" /></p>
+<p align="center"><img src="docs/assets/website-hero.png" alt="CursorCue website hero with an interactive shared cursor preview" width="960" /></p>
 
 ## Downloads
 
-Version **0.1.5** is an unsigned developer preview for Windows x64. Downloads require access to this private GitHub repository.
+Version **0.1.6** is an unsigned developer preview for Windows x64. Downloads require access to this private GitHub repository.
 
 | File                                                                                                   | Use                                                               |
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| [CursorCueSetup.exe](https://github.com/sansynx/CursorCue/releases/download/v0.1.5/CursorCueSetup.exe) | Recommended installer with a setup guide and Start menu shortcut. |
-| [CursorCue.msi](https://github.com/sansynx/CursorCue/releases/download/v0.1.5/CursorCue.msi)           | The same per-user installation through Windows Installer.         |
-| [CursorCue.exe](https://github.com/sansynx/CursorCue/releases/download/v0.1.5/CursorCue.exe)           | Run directly without installation.                                |
+| [CursorCueSetup.exe](https://github.com/sansynx/CursorCue/releases/download/v0.1.6/CursorCueSetup.exe) | Recommended installer with a setup guide and Start menu shortcut. |
+| [CursorCue.msi](https://github.com/sansynx/CursorCue/releases/download/v0.1.6/CursorCue.msi)           | The same per-user installation through Windows Installer.         |
+| [CursorCue.exe](https://github.com/sansynx/CursorCue/releases/download/v0.1.6/CursorCue.exe)           | Run directly without installation.                                |
 
 Quit older CursorCue copies before installing or running this build. Settings are preserved when upgrading the installed app.
 
@@ -60,6 +61,7 @@ From a Developer PowerShell terminal:
 
 ```powershell
 cd desktop
+./assets/build-icon.ps1
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace -- --test-threads=1
@@ -78,6 +80,8 @@ pnpm run dev
 ```
 
 Open `http://127.0.0.1:4173/`. Website download links point to the GitHub release assets.
+
+The live website is [cursorcue.pages.dev](https://cursorcue.pages.dev/). Cloudflare Pages publishes `website/dist` from `main`; the GitHub repository remains private.
 
 The native executable also supports an isolated capture diagnostic:
 
