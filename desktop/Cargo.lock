@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "cursorcue"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "cursorcue-config",
  "cursorcue-core",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "cursorcue-config"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "serde",
  "serde_json",
@@ -23,18 +23,18 @@ dependencies = [
 
 [[package]]
 name = "cursorcue-core"
-version = "0.1.6"
+version = "0.1.7"
 
 [[package]]
 name = "cursorcue-platform-windows"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "windows",
 ]
 
 [[package]]
 name = "cursorcue-render"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "cursorcue-core",
  "windows",

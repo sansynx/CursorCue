@@ -208,7 +208,7 @@ cursorcue.exe CursorCueExe
     $controls.Add(@('Welcome', 'Intro', 'Text', '22', '76', '336', '36', '1', '', 'Keep your shared cursor still or hidden in one-on-ones, team calls, reviews and presentations.', '', ''))
     $controls.Add(@('Welcome', 'Location', 'Text', '22', '124', '336', '44', '1', '', 'Installs for your Windows account in [INSTALLDIR]. No account or browser extension required.', '', ''))
     $controls.Add(@('Welcome', 'CloseCopies', 'Text', '22', '176', '336', '40', '1', '', 'Before continuing, Quit every running CursorCue copy using its tray menu. Setup replaces older installed versions.', '', ''))
-    $controls.Add(@('Welcome', 'Preview', 'Text', '22', '225', '336', '24', '1', '', 'Developer preview [ProductVersion]. Windows x64. Unsigned.', '', ''))
+    $controls.Add(@('Welcome', 'Version', 'Text', '22', '225', '336', '24', '1', '', 'Version [ProductVersion]. Windows x64. Not code-signed.', '', ''))
     $controls.Add(@('Welcome', 'Next', 'PushButton', '220', '266', '66', '20', '3', '', 'Next', 'Cancel', ''))
     $controls.Add(@('Welcome', 'Cancel', 'PushButton', '292', '266', '66', '20', '3', '', 'Cancel', 'Next', ''))
     $guide = @(
@@ -304,7 +304,11 @@ cursorcue.exe CursorCueExe
         $sdkVersion = (Get-ChildItem -LiteralPath (Join-Path $sdkRoot 'Lib') -Directory | Sort-Object Name -Descending | Select-Object -First 1).Name
         if (!$ManifestTool) { $ManifestTool = Join-Path $sdkRoot "bin\$sdkVersion\x64\mt.exe" }
         if (!(Test-Path -LiteralPath $ManifestTool)) { throw 'Windows SDK mt.exe is required to embed the asInvoker manifest. No new artifacts were published.' }
-        $vcRoot = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC'
+        $vswherePath = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+        if (!(Test-Path -LiteralPath $vswherePath)) { throw 'Visual Studio Installer is required to locate the C++ build tools.' }
+        $vsInstallation = & $vswherePath -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if ($LASTEXITCODE -ne 0 -or !$vsInstallation) { throw 'Visual Studio C++ x64 build tools were not found.' }
+        $vcRoot = Join-Path $vsInstallation 'VC\Tools\MSVC'
         $vcVersionDir = (Get-ChildItem -LiteralPath $vcRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
         $previousPath = $env:PATH
         $previousLib = $env:LIB

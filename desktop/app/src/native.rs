@@ -28,6 +28,9 @@ use windows::{
 };
 
 static COMMANDS: OnceLock<SyncSender<u32>> = OnceLock::new();
+static TASKBAR_CREATED: OnceLock<u32> = OnceLock::new();
+static TRAY_RESTORE_PENDING: AtomicBool = AtomicBool::new(false);
+static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 static DRAW_PENDING: AtomicBool = AtomicBool::new(false);
 static REPAINT_PENDING: AtomicBool = AtomicBool::new(false);
@@ -70,7 +73,7 @@ fn show_guide(owner: HWND) {
         MessageBoxW(
             Some(owner),
             w!(
-                "1. Open the app you want to share. Keep it unminimized.\n2. Tools > Choose window: select that app.\n3. In Meet/Zoom/Teams, share A WINDOW > CursorCue Share.\n4. Work in the ORIGINAL app. Freeze/hide affects only the shared cursor.\n\nCursor size & shortcuts:\nTools > Cursor size & shortcuts. Cursor size is 50-300%; shortcut keys are in the lower section. Apply saves changes; Close leaves the window.\n\nIf a shortcut is unavailable, use another modifier/key or clear it. Menu commands always work. Run one copy of CursorCue.\n\nKeep the source and CursorCue windows unminimized. At frame edges, the shared cursor is inset slightly so its whole shape stays visible.\n\nClosing the CursorCue window stops sharing output and leaves CursorCue in the tray. Choose Quit CursorCue to exit.\n\nThis is an unsigned developer preview. Test your meeting setup before a call or screen-sharing session."
+                "1. Open the app you want to share. Keep it unminimized.\n2. Tools > Choose window: select that app.\n3. In Meet/Zoom/Teams, share a window > CursorCue Share.\n4. Work in the original app. Freeze/hide affects only the shared cursor.\n\nCursor size & shortcuts:\nTools > Cursor size & shortcuts. Cursor size is 50-300%; shortcut keys are in the lower section. Apply saves changes; Close closes settings without applying edits.\n\nIf a shortcut is unavailable, use another modifier/key or clear it. Menu commands always work. Run one copy of CursorCue.\n\nKeep the source and CursorCue windows unminimized. At frame edges, the shared cursor is inset slightly so its whole shape stays visible.\n\nClosing the CursorCue window stops sharing output and leaves CursorCue in the tray. Choose Quit CursorCue to exit.\n\nThis build is not code-signed. Test your meeting setup before a call or screen-sharing session."
             ),
             w!("CursorCue - quick start"),
             MB_OK | MB_ICONINFORMATION,
@@ -123,6 +126,16 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wp: WPARAM, lp: 
     // SAFETY: Windows invokes this procedure with a live HWND; paint structs and string slices live across calls.
     unsafe {
         match message {
+            message
+                if message >= 0xc000
+                    && message
+                        == *TASKBAR_CREATED
+                            .get_or_init(|| RegisterWindowMessageW(w!("TaskbarCreated"))) =>
+            {
+                TRAY_AVAILABLE.store(false, Ordering::Relaxed);
+                TRAY_RESTORE_PENDING.store(true, Ordering::Relaxed);
+                LRESULT(0)
+            }
             WM_GETMINMAXINFO if lp.0 != 0 => {
                 let info = &mut *(lp.0 as *mut MINMAXINFO);
                 let dpi = GetDpiForWindow(hwnd).max(96) as i32;
@@ -192,7 +205,14 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wp: WPARAM, lp: 
             }
             WM_CLOSE => {
                 command(STOP);
-                let _ = ShowWindow(hwnd, SW_HIDE);
+                let _ = ShowWindow(
+                    hwnd,
+                    if TRAY_AVAILABLE.load(Ordering::Relaxed) {
+                        SW_HIDE
+                    } else {
+                        SW_RESTORE
+                    },
+                );
                 LRESULT(0)
             }
             WM_DESTROY => {
@@ -965,8 +985,28 @@ struct NativeResources {
     fixture: Option<DiagnosticFixture>,
     welcome: Option<Box<crate::presentation::Welcome>>,
 }
+impl NativeResources {
+    fn restore_tray_if_needed(&self) {
+        if !TRAY_RESTORE_PENDING.swap(false, Ordering::Relaxed) {
+            return;
+        }
+        // SAFETY: the retained icon data and main window belong to this UI thread.
+        unsafe {
+            let available = self
+                .tray
+                .as_ref()
+                .is_some_and(|tray| Shell_NotifyIconW(NIM_ADD, tray).as_bool());
+            TRAY_AVAILABLE.store(available, Ordering::Relaxed);
+            if !available {
+                let _ = ShowWindow(self.hwnd, SW_RESTORE);
+                let _ = SetForegroundWindow(self.hwnd);
+            }
+        }
+    }
+}
 impl Drop for NativeResources {
     fn drop(&mut self) {
+        TRAY_AVAILABLE.store(false, Ordering::Relaxed);
         // SAFETY: these resources are owned by this thread. App is dropped first so its capture sessions are already released.
         unsafe {
             for id in &self.hotkeys {
@@ -1160,13 +1200,14 @@ pub fn run() -> Result<()> {
         };
         let tip = wide("CursorCue - screen-sharing cursor control");
         tray.szTip[..tip.len()].copy_from_slice(&tip);
-        if !Shell_NotifyIconW(NIM_ADD, &tray).as_bool() {
+        let tray_available = Shell_NotifyIconW(NIM_ADD, &tray).as_bool();
+        TRAY_AVAILABLE.store(tray_available, Ordering::Relaxed);
+        if !tray_available {
             report_error(
                 "Windows could not add the CursorCue tray icon. Controls remain available in the Tools menu.",
             );
-        } else {
-            resources.tray = Some(tray);
         }
+        resources.tray = Some(tray);
         let mut app = App {
             hwnd,
             capture: None,
@@ -1260,6 +1301,7 @@ pub fn run() -> Result<()> {
             if INPUT_OVERFLOW.swap(false, Ordering::Relaxed) {
                 report_error("Too many controls arrived at once. Please repeat the last shortcut.");
             }
+            resources.restore_tray_if_needed();
             if DRAW_PENDING.swap(false, Ordering::Relaxed)
                 && let Err(error) = app.draw()
             {
@@ -1301,7 +1343,7 @@ pub fn run() -> Result<()> {
                     )?;
                     pixels_verified = false;
                     resized = true;
-                    println!("CursorCue diagnostic: source resize to1080p requested");
+                    println!("CursorCue diagnostic: source resize to 1080p requested");
                 }
                 if !restarted
                     && started.elapsed() >= Duration::from_secs(4)
@@ -1369,7 +1411,7 @@ pub fn run() -> Result<()> {
                             return Err(windows::core::Error::new(
                                 E_FAIL,
                                 format!(
-                                    "Circle hotspot/size pixel failed: center={center:?},rim={rim:?}"
+                                    "Circle hotspot/size pixel failed: center={center:?}, rim={rim:?}"
                                 ),
                             ));
                         }
@@ -1384,7 +1426,7 @@ pub fn run() -> Result<()> {
                     }
                     renderer.configure_cursor(1.0, 1.0, 0);
                     println!(
-                        "CursorCue diagnostic: Arrow/Dot/Circle hotspot,600% physical size and50% opacity GPU pixels verified"
+                        "CursorCue diagnostic: Arrow/Dot/Circle hotspot, 600% physical size and 50% opacity GPU pixels verified"
                     );
                     pixels_verified = true;
                 }
@@ -1446,6 +1488,80 @@ pub fn run() -> Result<()> {
 mod tests {
     use super::*;
     use cursorcue_config::Hotkey;
+    static TRAY_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    #[test]
+    fn taskbar_restart_restores_a_removed_tray_icon() {
+        let _guard = TRAY_TEST_LOCK.lock().unwrap();
+        let window = Window::new();
+        let tray = NOTIFYICONDATAW {
+            cbSize: size_of::<NOTIFYICONDATAW>() as u32,
+            hWnd: window.0,
+            uID: 1,
+            uFlags: NIF_ICON,
+            hIcon: unsafe { LoadIconW(None, IDI_APPLICATION).unwrap() },
+            ..Default::default()
+        };
+        let resources = NativeResources {
+            hwnd: window.0,
+            hotkeys: vec![],
+            tray: Some(tray),
+            fixture: None,
+            welcome: None,
+        };
+        // SAFETY: the fixture owns this window and icon; Explorer itself is never restarted.
+        unsafe {
+            assert!(Shell_NotifyIconW(NIM_ADD, &tray).as_bool());
+            assert!(Shell_NotifyIconW(NIM_DELETE, &tray).as_bool());
+            let restart = RegisterWindowMessageW(w!("TaskbarCreated"));
+            assert_ne!(restart, 0);
+            window_proc(window.0, restart, WPARAM(0), LPARAM(0));
+            resources.restore_tray_if_needed();
+            assert!(
+                Shell_NotifyIconW(NIM_MODIFY, &tray).as_bool(),
+                "the tray icon must be restored after TaskbarCreated"
+            );
+            let _ = ShowWindow(window.0, SW_SHOW);
+            window_proc(window.0, WM_CLOSE, WPARAM(0), LPARAM(0));
+            assert!(
+                !IsWindowVisible(window.0).as_bool(),
+                "closing the main window must still hide it when the tray is available"
+            );
+        }
+    }
+    #[test]
+    fn taskbar_restart_shows_main_window_when_tray_registration_fails() {
+        let _guard = TRAY_TEST_LOCK.lock().unwrap();
+        let window = Window::new();
+        let resources = NativeResources {
+            hwnd: window.0,
+            hotkeys: vec![],
+            tray: Some(NOTIFYICONDATAW {
+                cbSize: size_of::<NOTIFYICONDATAW>() as u32,
+                uID: 1,
+                ..Default::default()
+            }),
+            fixture: None,
+            welcome: None,
+        };
+        // SAFETY: the invalid icon owner forces registration failure without altering other tray icons.
+        unsafe {
+            assert!(!Shell_NotifyIconW(NIM_ADD, resources.tray.as_ref().unwrap()).as_bool());
+            assert!(!IsWindowVisible(window.0).as_bool());
+            let restart = RegisterWindowMessageW(w!("TaskbarCreated"));
+            assert_ne!(restart, 0);
+            window_proc(window.0, restart, WPARAM(0), LPARAM(0));
+            resources.restore_tray_if_needed();
+            assert!(
+                IsWindowVisible(window.0).as_bool(),
+                "Tools and Quit must remain reachable when the tray cannot be restored"
+            );
+            window_proc(window.0, WM_CLOSE, WPARAM(0), LPARAM(0));
+            assert!(
+                IsWindowVisible(window.0).as_bool(),
+                "closing without a tray icon must keep Tools and Quit reachable"
+            );
+        }
+    }
     #[test]
     fn welcome_mouse_wheel_keeps_instruction_positions_fixed() {
         let window = Window::new();

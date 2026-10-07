@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  website:
+    name: Website checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run test
+      - run: pnpm dlx prettier@3.6.2 --check ../README.md ../.github/workflows/ci.yml package.json server.mjs "dist/*.html" "dist/*.css" "dist/*.js" "tests/*.mjs"
+
+  windows:
+    name: Windows checks
+    runs-on: windows-2022
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - run: rustup update stable --no-self-update
+      - run: cargo +stable fmt --all --check
+      - run: cargo +stable clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo +stable test --locked --workspace -- --test-threads=1
+      - run: cargo +stable build --locked --release --workspace
+      - name: Build installers
+        run: ./installer/build-installer.ps1 -ExecutablePath ./target/release/cursorcue.exe -OutputDir ../release
+      - name: Build isolated installer fixture
+        run: ./installer/build-installer.ps1 -ExecutablePath ./target/release/cursorcue.exe -OutputDir ../work/installer-ci -ProductCode '{CC501575-5472-4D0E-A2B4-72D936817C2B}' -UpgradeCode '{BB9B7491-887B-40B5-B28B-0A09B3A8D417}' -ComponentCode '{2514ADC0-F16B-416B-B87F-95900165EB2B}'
+      - name: Test install and uninstall
+        run: ./installer/test-installer.ps1 -MsiPath ../work/installer-ci/CursorCue.msi -ExecutablePath ./target/release/cursorcue.exe -SetupPath ../work/installer-ci/CursorCueSetup.exe -TestDir ../work/installer-test-ci
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: CursorCue-Windows
+          path: |
+            desktop/target/release/cursorcue.exe
+            release/CursorCueSetup.exe
+            release/CursorCue.msi
+          retention-days: 7
+          if-no-files-found: error
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan Git history
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --location --retry 3 "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" --output "$archive"
+          echo "$GITLEAKS_SHA256  $archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git . --redact --no-banner

@@ -6,8 +6,8 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-pub const SCHEMA_VERSION: u32 = 1;
-pub const MAX_CONFIG_BYTES: u64 = 65_536;
+const SCHEMA_VERSION: u32 = 1;
+const MAX_CONFIG_BYTES: u64 = 65_536;
 static FILE_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

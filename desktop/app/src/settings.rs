@@ -448,7 +448,7 @@ impl SettingsWindow {
                         Some(LPARAM(label.as_ptr() as isize)),
                     );
                 }
-                let _edit = form.control(
+                form.control(
                     w!("EDIT"),
                     "",
                     120 + index as u32,
