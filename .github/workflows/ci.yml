@@ -53,18 +53,33 @@ jobs:
       - run: cargo +stable fmt --all --check
       - run: cargo +stable clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo +stable test --locked --workspace -- --test-threads=1
-      - run: cargo +stable build --locked --release --workspace
+      - name: Build release
+        run: |
+          $env:CARGO_ENCODED_RUSTFLAGS = @('-C', 'target-feature=+crt-static', "--remap-path-prefix=$env:USERPROFILE=/build-user", "--remap-path-prefix=$env:GITHUB_WORKSPACE=/cursorcue") -join [char]0x1f
+          cargo +stable build --locked --release --workspace --target x86_64-pc-windows-msvc
       - name: Build installers
-        run: ./installer/build-installer.ps1 -ExecutablePath ./target/release/cursorcue.exe -OutputDir ../release
+        run: ./installer/build-installer.ps1 -ExecutablePath ./target/x86_64-pc-windows-msvc/release/cursorcue.exe -OutputDir ../release
       - name: Build isolated installer fixture
-        run: ./installer/build-installer.ps1 -ExecutablePath ./target/release/cursorcue.exe -OutputDir ../work/installer-ci -ProductCode '{CC501575-5472-4D0E-A2B4-72D936817C2B}' -UpgradeCode '{BB9B7491-887B-40B5-B28B-0A09B3A8D417}' -ComponentCode '{2514ADC0-F16B-416B-B87F-95900165EB2B}'
+        run: ./installer/build-installer.ps1 -ExecutablePath ./target/x86_64-pc-windows-msvc/release/cursorcue.exe -OutputDir ../work/installer-ci -ProductCode '{CC501575-5472-4D0E-A2B4-72D936817C2B}' -UpgradeCode '{BB9B7491-887B-40B5-B28B-0A09B3A8D417}' -ComponentCode '{2514ADC0-F16B-416B-B87F-95900165EB2B}'
       - name: Test install and uninstall
-        run: ./installer/test-installer.ps1 -MsiPath ../work/installer-ci/CursorCue.msi -ExecutablePath ./target/release/cursorcue.exe -SetupPath ../work/installer-ci/CursorCueSetup.exe -TestDir ../work/installer-test-ci
+        run: ./installer/test-installer.ps1 -MsiPath ../work/installer-ci/CursorCue.msi -ExecutablePath ./target/x86_64-pc-windows-msvc/release/cursorcue.exe -SetupPath ../work/installer-ci/CursorCueSetup.exe -TestDir ../work/installer-test-ci
+      - name: Check release path privacy
+        run: |
+          $paths = @($env:USERPROFILE, $env:GITHUB_WORKSPACE) | ForEach-Object { $_; $_.Replace('\', '/') }
+          foreach ($file in @('./target/x86_64-pc-windows-msvc/release/cursorcue.exe', '../release/CursorCueSetup.exe')) {
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $file))
+            foreach ($encoding in @([Text.Encoding]::UTF8, [Text.Encoding]::Unicode)) {
+              $text = $encoding.GetString($bytes)
+              foreach ($path in $paths) {
+                if ($text.IndexOf($path, [StringComparison]::OrdinalIgnoreCase) -ge 0) { throw 'Release contains a local build path.' }
+              }
+            }
+          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: CursorCue-Windows
           path: |
-            desktop/target/release/cursorcue.exe
+            desktop/target/x86_64-pc-windows-msvc/release/cursorcue.exe
             release/CursorCueSetup.exe
             release/CursorCue.msi
           retention-days: 7

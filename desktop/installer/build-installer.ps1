@@ -301,7 +301,15 @@ cursorcue.exe CursorCueExe
         }
         if (!(Test-Path -LiteralPath $RustcPath)) { throw 'rustc is required to build the native setup wrapper. No new artifacts were published.' }
         $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
-        $sdkVersion = (Get-ChildItem -LiteralPath (Join-Path $sdkRoot 'Lib') -Directory | Sort-Object Name -Descending | Select-Object -First 1).Name
+        $sdkVersion = Get-ChildItem -LiteralPath (Join-Path $sdkRoot 'Lib') -Directory | Where-Object {
+            $candidateVersion = $null
+            [Version]::TryParse($_.Name, [ref]$candidateVersion) -and
+                (Test-Path -LiteralPath (Join-Path $sdkRoot "bin\$($_.Name)\x64\rc.exe") -PathType Leaf) -and
+                ($ManifestTool -or (Test-Path -LiteralPath (Join-Path $sdkRoot "bin\$($_.Name)\x64\mt.exe") -PathType Leaf)) -and
+                (Test-Path -LiteralPath (Join-Path $_.FullName 'um\x64\kernel32.lib') -PathType Leaf) -and
+                (Test-Path -LiteralPath (Join-Path $_.FullName 'ucrt\x64\ucrt.lib') -PathType Leaf)
+        } | Sort-Object { [Version]$_.Name } -Descending | Select-Object -First 1 -ExpandProperty Name
+        if (!$sdkVersion) { throw 'A complete Windows SDK with x64 resource tools, Windows libraries, and CRT libraries is required. No new artifacts were published.' }
         if (!$ManifestTool) { $ManifestTool = Join-Path $sdkRoot "bin\$sdkVersion\x64\mt.exe" }
         if (!(Test-Path -LiteralPath $ManifestTool)) { throw 'Windows SDK mt.exe is required to embed the asInvoker manifest. No new artifacts were published.' }
         $vswherePath = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -347,7 +355,7 @@ END
             [IO.File]::WriteAllText($setupRc, $resourceText, [Text.Encoding]::UTF8)
             & (Join-Path $sdkRoot "bin\$sdkVersion\x64\rc.exe") '/nologo' '/c65001' '/fo' $setupRes $setupRc
             if ($LASTEXITCODE -ne 0) { throw 'Setup icon resource compilation failed.' }
-            & $RustcPath (Join-Path $PSScriptRoot 'bootstrapper.rs') '--edition=2021' '--target' 'x86_64-pc-windows-msvc' '-C' 'opt-level=z' '-C' 'panic=abort' '-C' 'strip=symbols' '-C' 'debuginfo=0' '-C' 'target-feature=+crt-static' '-C' "link-arg=$setupRes" '-o' $setupPath
+            & $RustcPath (Join-Path $PSScriptRoot 'bootstrapper.rs') '--edition=2021' '--target' 'x86_64-pc-windows-msvc' "--remap-path-prefix=$env:USERPROFILE=/build-user" "--remap-path-prefix=$projectRoot=/cursorcue" '-C' 'opt-level=z' '-C' 'panic=abort' '-C' 'strip=symbols' '-C' 'debuginfo=0' '-C' 'target-feature=+crt-static' '-C' "link-arg=$setupRes" '-o' $setupPath
             if ($LASTEXITCODE -ne 0) { throw 'Native setup wrapper compilation failed. No new artifacts were published.' }
             $setupManifest = Join-Path $stage 'setup.manifest'
             [IO.File]::WriteAllText($setupManifest, [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'setup.manifest')).Replace('version="0.0.0.0"', ('version="' + $Version + '.0"')), [Text.Encoding]::UTF8)

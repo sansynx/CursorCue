@@ -66,7 +66,7 @@ cargo build --release --workspace
 ./installer/build-installer.ps1 -ExecutablePath ./target/release/cursorcue.exe -OutputDir ../release
 ```
 
-The Cargo workspace version controls executable and installer version metadata. Each release gets a distinct product identity within the same upgrade family. The Windows CRT is linked statically.
+The Cargo workspace version controls executable and installer version metadata. Each release gets a distinct product identity within the same upgrade family. The Windows CRT is linked statically. Published packages come from CI with local build paths removed.
 
 ```powershell
 cd ../website
