@@ -35,7 +35,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: pnpm run test
-      - run: pnpm dlx prettier@3.6.2 --check ../README.md ../.github/workflows/ci.yml package.json server.mjs "dist/*.html" "dist/*.css" "dist/*.js" "tests/*.mjs"
+      - run: pnpm dlx prettier@3.6.2 --check ../AGENTS.md ../README.md ../.github/workflows/ci.yml package.json server.mjs "dist/*.html" "dist/*.css" "dist/*.js" "tests/*.mjs"
 
   windows:
     name: Windows checks

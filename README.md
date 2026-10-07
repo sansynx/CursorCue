@@ -103,6 +103,8 @@ Installer lifecycle tests must use isolated product, upgrade, and component GUID
 
 ## Contributing
 
+Coding agents should start with [AGENTS.md](AGENTS.md) for repository context, commands, runtime constraints, and validation requirements.
+
 1. Fork the repository on GitHub and clone your fork.
 2. Create a branch for your change with `git switch -c your-change`.
 3. Make the change and run the relevant checks above. Keep changes focused and include a regression test for behavior fixes.
