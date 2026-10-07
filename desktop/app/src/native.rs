@@ -30,6 +30,7 @@ use windows::{
 static COMMANDS: OnceLock<SyncSender<u32>> = OnceLock::new();
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 static DRAW_PENDING: AtomicBool = AtomicBool::new(false);
+static REPAINT_PENDING: AtomicBool = AtomicBool::new(false);
 static INPUT_OVERFLOW: AtomicBool = AtomicBool::new(false);
 const CHOOSE: u32 = 10;
 const QUIT: u32 = 11;
@@ -132,6 +133,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wp: WPARAM, lp: 
                 LRESULT(0)
             }
             WM_SIZE => {
+                REPAINT_PENDING.store(true, Ordering::Relaxed);
                 crate::presentation::with_window(hwnd, |ui| ui.resize());
                 LRESULT(0)
             }
@@ -155,14 +157,9 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wp: WPARAM, lp: 
                 }
                 LRESULT(0)
             }
-            WM_MOUSEWHEEL if !CAPTURING.load(Ordering::Relaxed) => {
-                crate::presentation::with_window(hwnd, |ui| {
-                    ui.scroll(0, (wp.0 >> 16) as i16 as i32)
-                });
-                LRESULT(0)
-            }
+            WM_MOUSEWHEEL if !CAPTURING.load(Ordering::Relaxed) => LRESULT(0),
             WM_VSCROLL if !CAPTURING.load(Ordering::Relaxed) => {
-                crate::presentation::with_window(hwnd, |ui| ui.scroll((wp.0 & 0xffff) as i32, 0));
+                crate::presentation::with_window(hwnd, |ui| ui.scroll((wp.0 & 0xffff) as i32));
                 LRESULT(0)
             }
             WM_CTLCOLORSTATIC => {
@@ -202,7 +199,12 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wp: WPARAM, lp: 
                 PostQuitMessage(0);
                 LRESULT(0)
             }
-            WM_ERASEBKGND => LRESULT(1),
+            WM_ERASEBKGND => {
+                if !CAPTURING.load(Ordering::Relaxed) {
+                    crate::presentation::with_window(hwnd, |ui| ui.erase(HDC(wp.0 as *mut _)));
+                }
+                LRESULT(1)
+            }
             WM_SETCURSOR
                 if CAPTURING.load(Ordering::Relaxed)
                     && (lp.0 & 0xffff) as u32 == HTCLIENT
@@ -213,6 +215,9 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wp: WPARAM, lp: 
                 LRESULT(1)
             }
             WM_PAINT => {
+                if CAPTURING.load(Ordering::Relaxed) {
+                    REPAINT_PENDING.store(true, Ordering::Relaxed);
+                }
                 let mut paint = PAINTSTRUCT::default();
                 let dc = BeginPaint(hwnd, &mut paint);
                 if !CAPTURING.load(Ordering::Relaxed) {
@@ -662,7 +667,13 @@ impl App {
             check_first_frame(self.frames, self.last_tick, Instant::now())?;
             let mut client = RECT::default();
             GetClientRect(self.hwnd, &mut client)?;
-            if let Some(surface) = self.surface {
+            if let Some(surface) = self.surface
+                && renderer.output_size()
+                    != (
+                        (client.right - client.left).max(1) as u32,
+                        (client.bottom - client.top).max(1) as u32,
+                    )
+            {
                 SetWindowPos(
                     surface,
                     None,
@@ -717,6 +728,9 @@ impl App {
                 .track(mapped, (now - self.last_tick).as_secs_f32());
             if self.frames > 0 {
                 self.last_tick = now;
+            }
+            if REPAINT_PENDING.swap(false, Ordering::Relaxed) {
+                renderer.invalidate();
             }
             renderer.render(&self.cursor)?;
         }
@@ -1074,6 +1088,30 @@ pub fn run() -> Result<()> {
             Some(instance.into()),
             None,
         )?;
+        let dpi = GetDpiForWindow(hwnd).max(96) as i32;
+        let mut monitor = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(
+            MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+            &mut monitor,
+        )
+        .as_bool()
+        {
+            let work = monitor.rcWork;
+            let width = (1000 * dpi / 96).min((work.right - work.left - 32).max(360));
+            let height = (650 * dpi / 96).min((work.bottom - work.top - 32).max(280));
+            SetWindowPos(
+                hwnd,
+                None,
+                work.left + (work.right - work.left - width) / 2,
+                work.top + (work.bottom - work.top - height) / 2,
+                width,
+                height,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )?;
+        }
         let mut resources = NativeResources {
             hwnd,
             hotkeys: (1..=5).collect(),
@@ -1409,6 +1447,90 @@ mod tests {
     use super::*;
     use cursorcue_config::Hotkey;
     #[test]
+    fn welcome_mouse_wheel_keeps_instruction_positions_fixed() {
+        let window = Window::new();
+        let _welcome = crate::presentation::Welcome::new(window.0).unwrap();
+        unsafe {
+            let label = GetDlgItem(Some(window.0), 102).unwrap();
+            let mut before = RECT::default();
+            GetWindowRect(label, &mut before).unwrap();
+            window_proc(
+                window.0,
+                WM_MOUSEWHEEL,
+                WPARAM((-120i16 as u16 as usize) << 16),
+                LPARAM(0),
+            );
+            let mut after = RECT::default();
+            GetWindowRect(label, &mut after).unwrap();
+            assert_eq!(
+                before.top, after.top,
+                "welcome instructions must not move with the wheel"
+            );
+        }
+    }
+    #[test]
+    fn welcome_wheel_does_not_repaint_or_shift_text_when_content_fits() {
+        let window = Window::new();
+        unsafe {
+            SetWindowPos(window.0, None, 0, 0, 1000, 900, SWP_NOZORDER | SWP_NOMOVE).unwrap();
+        }
+        let _welcome = crate::presentation::Welcome::new(window.0).unwrap();
+        unsafe {
+            let _ = ValidateRect(Some(window.0), None);
+        }
+        unsafe {
+            window_proc(
+                window.0,
+                WM_MOUSEWHEEL,
+                WPARAM((-120i16 as u16 as usize) << 16),
+                LPARAM(0),
+            );
+        }
+        unsafe {
+            assert!(
+                !GetUpdateRect(window.0, None, false).as_bool(),
+                "wheel input must not repaint a stationary setup page"
+            );
+        }
+    }
+    #[test]
+    fn welcome_erase_repaints_background_for_themed_children() {
+        let window = Window::new();
+        let _welcome = crate::presentation::Welcome::new(window.0).unwrap();
+        unsafe {
+            let screen = GetDC(Some(window.0));
+            let dc = CreateCompatibleDC(Some(screen));
+            let bitmap = CreateCompatibleBitmap(screen, 64, 64);
+            let previous = SelectObject(dc, bitmap.into());
+            let stale = CreateSolidBrush(COLORREF(0xff00ff));
+            FillRect(
+                dc,
+                &RECT {
+                    left: 0,
+                    top: 0,
+                    right: 64,
+                    bottom: 64,
+                },
+                stale,
+            );
+            assert_eq!(
+                window_proc(window.0, WM_ERASEBKGND, WPARAM(dc.0 as usize), LPARAM(0)).0,
+                1
+            );
+            let color = GetPixel(dc, 20, 20);
+            SelectObject(dc, previous);
+            let _ = DeleteObject(bitmap.into());
+            let _ = DeleteObject(stale.into());
+            let _ = DeleteDC(dc);
+            ReleaseDC(Some(window.0), screen);
+            assert_eq!(
+                color,
+                COLORREF(0xfbf6f4),
+                "parent must erase old button pixels"
+            );
+        }
+    }
+    #[test]
     fn presentation_has_direct_choose_settings_and_help_controls() {
         let window = Window::new();
         let _welcome = crate::presentation::Welcome::new(window.0).unwrap();
@@ -1423,31 +1545,6 @@ mod tests {
         }
     }
     #[test]
-    fn presentation_preserves_precision_wheel_scroll_deltas() {
-        let window = Window::new();
-        let welcome = crate::presentation::Welcome::new(window.0).unwrap();
-        let position = || unsafe {
-            let mut info = SCROLLINFO {
-                cbSize: size_of::<SCROLLINFO>() as u32,
-                fMask: SIF_POS,
-                ..Default::default()
-            };
-            GetScrollInfo(window.0, SB_VERT, &mut info).unwrap();
-            info.nPos
-        };
-        for _ in 0..4 {
-            welcome.scroll(0, -30);
-        }
-        let precision = position();
-        assert!(
-            precision > 0,
-            "precision wheel events must scroll the guide"
-        );
-        welcome.scroll(SB_TOP.0, 0);
-        welcome.scroll(0, -120);
-        assert_eq!(position(), precision);
-    }
-    #[test]
     fn presentation_controls_hide_for_capture_and_restore_with_dpi_and_scrolling() {
         let window = Window::new();
         let welcome = crate::presentation::Welcome::new(window.0).unwrap();
@@ -1459,7 +1556,7 @@ mod tests {
             welcome.update_dpi(192).unwrap();
             welcome.set_live(false);
             assert!(IsWindowVisible(button).as_bool());
-            welcome.scroll(SB_BOTTOM.0, 0);
+            welcome.scroll(SB_BOTTOM.0);
             let footer = GetDlgItem(Some(window.0), 108).unwrap();
             let mut bounds = RECT::default();
             GetWindowRect(footer, &mut bounds).unwrap();
@@ -1495,6 +1592,22 @@ mod tests {
     }
     #[test]
     fn gpu_cursor_keeps_its_head_and_tail_visible_at_source_edges() {
+        let (_window, mut renderer, _texture) = gpu_scene();
+        renderer.configure_cursor(1.0, 1.0, 0);
+        let mut cursor = Cursor::default();
+        cursor.position = Point { x: 99.0, y: 99.0 };
+        for point in [Point { x: 77.0, y: 79.0 }, Point { x: 94.0, y: 97.0 }] {
+            let pixel = renderer
+                .diagnostic_pixel(&cursor, point)
+                .expect("edge cursor probe");
+            assert!(pixel[0] < 100, "cursor head/tail was clipped: {pixel:?}");
+        }
+    }
+    fn gpu_scene() -> (
+        Window,
+        Renderer,
+        windows::Win32::Graphics::Direct3D11::ID3D11Texture2D,
+    ) {
         use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
         let window = Window::new();
         let mut renderer = Renderer::new(window.0, 120, 100).expect("GPU renderer");
@@ -1527,18 +1640,50 @@ mod tests {
                 )
                 .expect("source texture");
         }
-        renderer
-            .update_source(&texture.expect("texture"))
-            .expect("source copy");
-        renderer.configure_cursor(1.0, 1.0, 0);
+        let texture = texture.expect("texture");
+        renderer.update_source(&texture).expect("source copy");
+        (window, renderer, texture)
+    }
+    #[test]
+    fn gpu_skips_static_frames_but_updates_motion_visibility_source_and_size() {
+        let (_window, mut renderer, texture) = gpu_scene();
         let mut cursor = Cursor::default();
-        cursor.position = Point { x: 99.0, y: 99.0 };
-        for point in [Point { x: 77.0, y: 79.0 }, Point { x: 94.0, y: 97.0 }] {
-            let pixel = renderer
-                .diagnostic_pixel(&cursor, point)
-                .expect("edge cursor probe");
-            assert!(pixel[0] < 100, "cursor head/tail was clipped: {pixel:?}");
+        cursor.position = Point { x: 40.0, y: 40.0 };
+        assert!(renderer.render(&cursor).unwrap());
+        for _ in 0..120 {
+            assert!(
+                !renderer.render(&cursor).unwrap(),
+                "static source must not redraw"
+            );
         }
+        cursor.freeze();
+        assert!(!renderer.render(&cursor).unwrap());
+        cursor.hide();
+        assert!(renderer.render(&cursor).unwrap());
+        cursor.position = Point { x: 70.0, y: 60.0 };
+        assert!(
+            !renderer.render(&cursor).unwrap(),
+            "hidden motion must not redraw"
+        );
+        cursor.hide();
+        assert!(renderer.render(&cursor).unwrap());
+        cursor.position.x -= 10.0;
+        assert!(renderer.render(&cursor).unwrap());
+        renderer.update_source(&texture).unwrap();
+        assert!(renderer.render(&cursor).unwrap());
+        assert!(!renderer.render(&cursor).unwrap());
+        renderer.resize(240, 200).unwrap();
+        assert!(renderer.render(&cursor).unwrap());
+        renderer.configure_cursor(1.5, 0.5, 2);
+        assert!(renderer.render(&cursor).unwrap());
+        assert!(!renderer.render(&cursor).unwrap());
+        let _ = renderer
+            .diagnostic_pixel(&cursor, Point { x: 50.0, y: 50.0 })
+            .unwrap();
+        assert!(
+            renderer.render(&cursor).unwrap(),
+            "diagnostic probes must invalidate presentation state"
+        );
     }
     #[test]
     fn missing_first_frame_times_out_but_static_captured_content_remains_valid() {

@@ -55,6 +55,8 @@ pub struct Renderer {
     source_size: (u32, u32),
     output_size: (u32, u32),
     appearance: [f32; 3],
+    last_draw: Option<[f32; 12]>,
+    source_dirty: bool,
 }
 
 impl Renderer {
@@ -176,6 +178,8 @@ impl Renderer {
                 source_size: (0, 0),
                 output_size: (width, height),
                 appearance: [1.0, 1.0, 0.0],
+                last_draw: None,
+                source_dirty: true,
             };
             result.create_target()?;
             Ok(result)
@@ -206,6 +210,7 @@ impl Renderer {
             )?;
         }
         self.output_size = (width, height);
+        self.invalidate();
         self.create_target()
     }
     pub fn update_source(&mut self, source: &ID3D11Texture2D) -> Result<()> {
@@ -231,27 +236,34 @@ impl Renderer {
             self.context
                 .CopyResource(&required(self.texture.clone())?, source);
         }
+        self.source_dirty = true;
         Ok(())
     }
-    pub fn render(&self, cursor: &Cursor) -> Result<()> {
+    pub fn render(&mut self, cursor: &Cursor) -> Result<bool> {
         if self.view.is_none() {
-            return Ok(());
+            return Ok(false);
+        }
+        let state = self.draw_state(cursor);
+        if !self.source_dirty && self.last_draw == Some(state) {
+            return Ok(false);
         }
         self.draw(cursor)?;
         // SAFETY: the swap chain belongs to the current rendering thread.
-        unsafe { self.swap.Present(1, DXGI_PRESENT(0)).ok() }
-    }
-    fn draw(&self, cursor: &Cursor) -> Result<()> {
-        if self.view.is_none() {
-            return Ok(());
+        unsafe {
+            self.swap.Present(1, DXGI_PRESENT(0)).ok()?;
         }
+        self.last_draw = Some(state);
+        self.source_dirty = false;
+        Ok(true)
+    }
+    fn draw_state(&self, cursor: &Cursor) -> [f32; 12] {
         let (position, scale) = fit_cursor(
             cursor.position,
             self.source_size,
             self.appearance[0],
             self.appearance[2] as u32,
         );
-        let values: [f32; 12] = [
+        let mut values: [f32; 12] = [
             self.source_size.0 as f32,
             self.source_size.1 as f32,
             self.output_size.0 as f32,
@@ -265,6 +277,16 @@ impl Renderer {
             0.0,
             0.0,
         ];
+        if !cursor.visible() {
+            values[4..10].fill(0.0);
+        }
+        values
+    }
+    fn draw(&self, cursor: &Cursor) -> Result<()> {
+        if self.view.is_none() {
+            return Ok(());
+        }
+        let values = self.draw_state(cursor);
         // SAFETY: buffer update copies exactly 48 bytes; valid COM resources are bound on their owning thread.
         unsafe {
             self.context
@@ -292,19 +314,31 @@ impl Renderer {
         }
     }
     pub fn diagnostic_pixel(
-        &self,
+        &mut self,
         cursor: &Cursor,
         point: cursorcue_core::Point,
     ) -> Result<[u8; 4]> {
+        self.invalidate();
+        if self.view.is_none()
+            || !point.x.is_finite()
+            || !point.y.is_finite()
+            || point.x < 0.0
+            || point.y < 0.0
+        {
+            return Err(Error::new(
+                E_FAIL,
+                "Diagnostic pixel requires a valid source and coordinates",
+            ));
+        }
         self.draw(cursor)?;
         let scale = (self.output_size.0 as f32 / self.source_size.0 as f32)
             .min(self.output_size.1 as f32 / self.source_size.1 as f32);
         let x = ((self.output_size.0 as f32 - self.source_size.0 as f32 * scale) * 0.5
             + point.x * scale)
-            .round() as u32;
+            .floor() as u32;
         let y = ((self.output_size.1 as f32 - self.source_size.1 as f32 * scale) * 0.5
             + point.y * scale)
-            .round() as u32;
+            .floor() as u32;
         if x >= self.output_size.0 || y >= self.output_size.1 {
             return Err(Error::new(
                 E_FAIL,
@@ -363,6 +397,12 @@ impl Renderer {
     }
     pub fn source_size(&self) -> (u32, u32) {
         self.source_size
+    }
+    pub fn output_size(&self) -> (u32, u32) {
+        self.output_size
+    }
+    pub fn invalidate(&mut self) {
+        self.last_draw = None;
     }
     pub fn configure_cursor(&mut self, scale: f32, opacity: f32, style: u32) {
         self.appearance = [scale, opacity, style as f32];

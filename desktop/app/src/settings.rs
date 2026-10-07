@@ -140,7 +140,14 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
                     ..Default::default()
                 };
                 if GetScrollInfo(hwnd, SB_VERT, &mut info).is_ok() {
-                    scroll_to(hwnd, info.nPos - ((wp.0 >> 16) as i16 as i32) / 120 * 90);
+                    let form = GetPropW(hwnd, w!("CursorCueSettings"));
+                    if !form.is_invalid() {
+                        let form = &*(form.0 as *const SettingsWindow);
+                        let delta = form.wheel_remainder.get()
+                            + (wp.0 >> 16) as i16 as i32 * (90.0 * form.scale.get()) as i32;
+                        form.wheel_remainder.set(delta % 120);
+                        scroll_to(hwnd, info.nPos - delta / 120);
+                    }
                 }
                 LRESULT(0)
             }
@@ -190,12 +197,14 @@ pub struct SettingsWindow {
     pub hwnd: HWND,
     scale: Cell<f32>,
     font: Cell<HFONT>,
+    wheel_remainder: Cell<i32>,
 }
 impl SettingsWindow {
     pub fn update_dpi(&self, dpi: u32, bounds: RECT) {
         // SAFETY: this form and its child controls belong to the current UI thread.
         unsafe {
             scroll_to(self.hwnd, 0);
+            self.wheel_remainder.set(0);
             let scale = dpi.max(96) as f32 / 96.0;
             let font = CreateFontW(
                 -(16.0 * scale) as i32,
@@ -232,19 +241,20 @@ impl SettingsWindow {
                 ];
                 MapWindowPoints(None, Some(self.hwnd), &mut points);
                 let ratio = scale / self.scale.get();
-                let _ = MoveWindow(
+                let _ = SetWindowPos(
                     child,
+                    None,
                     (points[0].x as f32 * ratio).round() as i32,
                     (points[0].y as f32 * ratio).round() as i32,
                     ((points[1].x - points[0].x) as f32 * ratio).round() as i32,
                     ((points[1].y - points[0].y) as f32 * ratio).round() as i32,
-                    true,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOCOPYBITS,
                 );
                 SendMessageW(
                     child,
                     WM_SETFONT,
                     Some(WPARAM(font.0 as usize)),
-                    Some(LPARAM(1)),
+                    Some(LPARAM(0)),
                 );
                 child = GetWindow(child, GW_HWNDNEXT).unwrap_or_default();
             }
@@ -261,6 +271,12 @@ impl SettingsWindow {
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
             scroll_range(self.hwnd);
+            let _ = RedrawWindow(
+                Some(self.hwnd),
+                None,
+                None,
+                RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN,
+            );
         }
     }
     pub fn new(owner: Option<HWND>, settings: &Settings) -> Result<Box<Self>> {
@@ -329,6 +345,7 @@ impl SettingsWindow {
                 hwnd,
                 scale: Cell::new(scale),
                 font: Cell::new(font),
+                wheel_remainder: Cell::new(0),
             });
             SetPropW(
                 hwnd,
@@ -710,6 +727,15 @@ impl SettingsWindow {
                 *hotkey = Hotkey { modifiers, key };
             }
         }
+        if !(0.5..=3.0).contains(&settings.cursor_scale) {
+            return Err(invalid("Cursor size must be 50-300%."));
+        }
+        if !(0.2..=1.0).contains(&settings.opacity) {
+            return Err(invalid("Opacity must be 20-100%."));
+        }
+        if !(120..=450).contains(&settings.animation_duration_ms) {
+            return Err(invalid("Resume duration must be 120-450 milliseconds."));
+        }
         settings
             .validate()
             .map_err(|error| invalid(&error.to_string()))?;
@@ -799,6 +825,28 @@ fn key_label(key: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn precision_wheel_input_scrolls_settings() {
+        let form = SettingsWindow::new(None, &Settings::default()).unwrap();
+        unsafe {
+            SetWindowPos(form.hwnd, None, 0, 0, 670, 350, SWP_NOZORDER | SWP_NOMOVE).unwrap();
+            for _ in 0..4 {
+                SendMessageW(
+                    form.hwnd,
+                    WM_MOUSEWHEEL,
+                    Some(WPARAM((-30i16 as u16 as usize) << 16)),
+                    None,
+                );
+            }
+            let mut info = SCROLLINFO {
+                cbSize: std::mem::size_of::<SCROLLINFO>() as u32,
+                fMask: SIF_POS,
+                ..Default::default()
+            };
+            GetScrollInfo(form.hwnd, SB_VERT, &mut info).unwrap();
+            assert!(info.nPos > 0);
+        }
+    }
     #[test]
     fn settings_restore_reopen_and_rescale_without_losing_values() {
         let form = SettingsWindow::new(None, &Settings::default()).unwrap();

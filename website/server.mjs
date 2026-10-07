@@ -14,9 +14,6 @@ const mime = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
-  ".exe": "application/octet-stream",
-  ".msi": "application/octet-stream",
-  ".zip": "application/zip",
 };
 http
   .createServer(async (request, response) => {

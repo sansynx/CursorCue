@@ -9,6 +9,7 @@ const modeLabel = document.getElementById("mode-label");
 const caption = document.getElementById("demo-caption");
 const ripple = document.getElementById("ripple");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const actionButtons = document.querySelectorAll("[data-action]");
 setupSmoothScroll(window, reducedMotion);
 const labels = {
   following: "Following your mouse",
@@ -23,25 +24,27 @@ const captions = {
   drop: "Dropped at your mouse position. The shared cursor stays here.",
 };
 let animationTimer;
+let paintedMode;
 
 function paint() {
   privatePointer.style.left = `clamp(10px, ${cue.real.x}%, calc(100% - 10px))`;
   privatePointer.style.top = `clamp(10px, ${cue.real.y}%, calc(100% - 10px))`;
   audience.style.left = `clamp(10px, ${cue.audience.x}%, calc(100% - 10px))`;
   audience.style.top = `clamp(10px, ${cue.audience.y}%, calc(100% - 10px))`;
-  audience.style.visibility = cue.visible ? "visible" : "hidden";
   audience.classList.toggle("label-left", cue.audience.x > 75);
   privatePointer.classList.toggle("label-left", cue.real.x > 75);
   audience.classList.toggle("label-top", cue.audience.y > 75);
   privatePointer.classList.toggle("label-top", cue.real.y > 75);
+  if (paintedMode === cue.mode) return;
+  paintedMode = cue.mode;
+  audience.style.visibility = cue.visible ? "visible" : "hidden";
   workspace.classList.toggle("independent", cue.mode !== "following");
   modeLabel.textContent = labels[cue.mode];
-  document.querySelectorAll("[data-action]").forEach((button) => {
+  actionButtons.forEach((button) => {
     const selected =
       (button.dataset.action === "freeze" && cue.mode === "frozen") ||
       (button.dataset.action === "hide" && cue.mode === "hidden") ||
       (button.dataset.action === "resume" && cue.mode === "following");
-    button.classList.toggle("selected", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
 }
@@ -92,17 +95,15 @@ workspace.addEventListener("pointerdown", (event) => {
   workspace.focus({ preventScroll: true });
   paint();
   if (!cue.visible) return;
-  ripple.style.left = `${cue.audience.x}%`;
-  ripple.style.top = `${cue.audience.y}%`;
+  ripple.style.left = audience.style.left;
+  ripple.style.top = audience.style.top;
   ripple.classList.remove("pop");
   void ripple.offsetWidth;
   ripple.classList.add("pop");
 });
-document
-  .querySelectorAll("[data-action]")
-  .forEach((button) =>
-    button.addEventListener("click", () => act(button.dataset.action)),
-  );
+actionButtons.forEach((button) =>
+  button.addEventListener("click", () => act(button.dataset.action)),
+);
 document.getElementById("reset-demo").addEventListener("click", () => {
   clearTimeout(animationTimer);
   audience.classList.remove("smooth");

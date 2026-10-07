@@ -16,12 +16,29 @@ fn main() {
         .expect("CursorCue manifest");
     println!("cargo:rerun-if-changed={}", manifest.display());
     let output = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let version = env::var("CARGO_PKG_VERSION").unwrap();
+    let parts: Vec<u16> = version
+        .split('.')
+        .map(|part| part.parse().expect("numeric release version"))
+        .collect();
+    assert_eq!(parts.len(), 3, "release version must be major.minor.patch");
+    let version_numbers = format!("{},{},{},0", parts[0], parts[1], parts[2]);
+    let manifest_output = output.join("app.manifest");
+    fs::write(
+        &manifest_output,
+        fs::read_to_string(&manifest).unwrap().replacen(
+            "version=\"0.0.0.0\"",
+            &format!("version=\"{version}.0\""),
+            1,
+        ),
+    )
+    .unwrap();
     let rc = output.join("CursorCue.rc");
     let resource = output.join("CursorCue.res");
-    fs::write(&rc, format!("1 ICON \"{}\"\n1 VERSIONINFO\n FILEVERSION 0,1,3,0\n PRODUCTVERSION 0,1,3,0\n FILEOS 0x40004\n FILETYPE 1\nBEGIN\n BLOCK \"StringFileInfo\"\n BEGIN\n  BLOCK \"040904B0\"\n  BEGIN\n   VALUE \"FileDescription\", \"CursorCue\"\n   VALUE \"ProductName\", \"CursorCue\"\n   VALUE \"FileVersion\", \"0.1.3\"\n   VALUE \"ProductVersion\", \"0.1.3\"\n  END\n END\n BLOCK \"VarFileInfo\"\n BEGIN\n  VALUE \"Translation\", 0x409, 1200\n END\nEND\n", icon.to_string_lossy().replace('\\', "/"))).unwrap();
+    fs::write(&rc, format!("1 ICON \"{}\"\n1 VERSIONINFO\n FILEVERSION {version_numbers}\n PRODUCTVERSION {version_numbers}\n FILEOS 0x40004\n FILETYPE 1\nBEGIN\n BLOCK \"StringFileInfo\"\n BEGIN\n  BLOCK \"040904B0\"\n  BEGIN\n   VALUE \"FileDescription\", \"CursorCue\"\n   VALUE \"ProductName\", \"CursorCue\"\n   VALUE \"FileVersion\", \"{version}\"\n   VALUE \"ProductVersion\", \"{version}\"\n  END\n END\n BLOCK \"VarFileInfo\"\n BEGIN\n  VALUE \"Translation\", 0x409, 1200\n END\nEND\n", icon.to_string_lossy().replace('\\', "/"))).unwrap();
     let manifest_resource = format!(
         "1 24 \"{}\"\n",
-        manifest.to_string_lossy().replace('\\', "/")
+        manifest_output.to_string_lossy().replace('\\', "/")
     );
     let mut rc_content = fs::read_to_string(&rc).unwrap();
     rc_content.push_str(&manifest_resource);
@@ -37,6 +54,7 @@ fn main() {
     let compiler = versions.last().expect("Windows SDK resource compiler");
     let status = Command::new(compiler)
         .arg("/nologo")
+        .arg("/c65001")
         .arg("/fo")
         .arg(&resource)
         .arg(&rc)

@@ -1,9 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap");
 :root {
   --color-paper: #f4f6fb;
   --color-ink: #0e1116;
   --color-graphite: #5c6270;
-  --color-faint: #8d93a0;
   --color-hairline: #e3e5ea;
   --color-well: #eceff8;
   --color-signal: #1b3bff;
@@ -12,8 +10,6 @@
     "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-display: Outfit, "Public Sans", sans-serif;
   --ease-out-soft: cubic-bezier(0.22, 0.8, 0.26, 1);
-  --radius-box: 1.25rem;
-  --radius-field: 0.75rem;
 }
 * {
   box-sizing: border-box;
@@ -417,24 +413,32 @@ h1 {
   font-size: 16px;
 }
 .steps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 40px;
-  list-style: none;
-  padding: 0;
-  margin: 36px 0 0;
+  max-width: 760px;
+  list-style: decimal;
+  padding-left: 24px;
+  margin: 32px auto 0;
 }
 .steps li {
-  padding-top: 18px;
-  border-top: 1px solid var(--color-hairline);
+  padding-left: 8px;
+  margin-bottom: 22px;
+}
+.steps li::marker {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--color-signal);
 }
 .steps h3 {
-  font-size: 24px;
-  margin-bottom: 10px;
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  margin-bottom: 6px;
 }
 .steps p {
-  font-size: 15px;
-  color: var(--color-graphite);
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--color-ink);
 }
 .workflow-note {
   margin-top: 30px;
@@ -628,19 +632,17 @@ h1 {
     font-size: 15px;
   }
   .steps {
-    grid-template-columns: 1fr;
-    gap: 20px;
     margin-top: 26px;
   }
   .steps li {
-    padding-top: 15px;
+    padding-left: 6px;
   }
   .steps h3 {
-    font-size: 22px;
+    font-size: 18px;
     margin-bottom: 6px;
   }
   .steps p {
-    font-size: 15px;
+    font-size: 16px;
   }
   .workflow-note {
     font-size: 12px;

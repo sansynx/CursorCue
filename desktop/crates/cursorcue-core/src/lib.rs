@@ -10,7 +10,6 @@ pub enum Mode {
     Frozen,
     Hidden,
     Animating,
-    Disabled,
 }
 
 pub struct Cursor {
@@ -111,7 +110,7 @@ impl Cursor {
         self.freeze();
     }
     pub fn visible(&self) -> bool {
-        !matches!(self.mode, Mode::Hidden | Mode::Disabled)
+        self.mode != Mode::Hidden
     }
 }
 pub fn map_to_source(point: Point, bounds: [f32; 4], size: Point) -> Option<Point> {

@@ -8,6 +8,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if (!('CursorCueInstallerCheck' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using System.Text;
+public static class CursorCueInstallerCheck {
+    [DllImport("msi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern uint MsiEnumClientsW(string component, uint index, StringBuilder product);
+}
+'@
+}
 $MsiPath = (Resolve-Path -LiteralPath $MsiPath).Path
 $ExecutablePath = (Resolve-Path -LiteralPath $ExecutablePath).Path
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -33,6 +43,21 @@ $upgradeView.Execute()
 $upgradeRecord = $upgradeView.Fetch()
 $upgradeCode = $upgradeRecord.StringData(1)
 $upgradeView.Close()
+$componentView = $database.OpenView('SELECT `ComponentId` FROM `Component`')
+$componentView.Execute()
+while ($componentRecord = $componentView.Fetch()) {
+    $componentCode = $componentRecord.StringData(1)
+    if (!$componentCode -or $componentCode -eq '{82025BFC-A311-4A2D-9099-A858FD8FF6E0}') {
+        throw 'Lifecycle tests require isolated component GUIDs, never production CursorCue components.'
+    }
+    $componentClient = [Text.StringBuilder]::new(39)
+    $clientResult = [CursorCueInstallerCheck]::MsiEnumClientsW($componentCode, 0, $componentClient)
+    if ($clientResult -eq 0) { throw 'Test component is already used by an installed product.' }
+    if ($clientResult -notin @(259, 1607)) { throw "Could not verify component isolation: $clientResult" }
+    $null = [Runtime.InteropServices.Marshal]::FinalReleaseComObject($componentRecord)
+}
+$componentView.Close()
+$null = [Runtime.InteropServices.Marshal]::FinalReleaseComObject($componentView)
 if ($upgradeCode -eq '{7D0BD59C-0911-48DC-87C5-8EAA89BFCED7}') {
     throw 'Lifecycle tests require an isolated test UpgradeCode and ComponentCode; never test against the real installed CursorCue family.'
 }
@@ -71,6 +96,27 @@ Write-Output 'PASS: Native MSI condition rejects older or invalid Windows builds
 $state = $installer.ProductState($productCode)
 $null = [Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
 if ($state -ne -1) { throw "Test refuses to modify an already registered product $productCode." }
+if ($SetupPath) {
+    $SetupPath = (Resolve-Path -LiteralPath $SetupPath).Path
+    if (!$SetupPath.StartsWith(($taskRoot.TrimEnd('\') + '\work\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Setup lifecycle tests require a task-owned test wrapper in work/.' }
+    $setupBytes = [IO.File]::ReadAllBytes($SetupPath)
+    $msiBytes = [IO.File]::ReadAllBytes($MsiPath)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    $matches = $false
+    try {
+        $expected = [Convert]::ToHexString($hash.ComputeHash($msiBytes))
+        for ($offset = 0; $offset -le $setupBytes.Length - $msiBytes.Length; $offset++) {
+            if ($setupBytes[$offset] -ne $msiBytes[0]) { continue }
+            $headerMatches = $true
+            for ($index = 1; $index -lt 8; $index++) {
+                if ($setupBytes[$offset + $index] -ne $msiBytes[$index]) { $headerMatches = $false; break }
+            }
+            if ($headerMatches -and [Convert]::ToHexString($hash.ComputeHash($setupBytes, $offset, $msiBytes.Length)) -eq $expected) { $matches = $true; break }
+        }
+    } finally { $hash.Dispose() }
+    if (!$matches) { throw 'Setup wrapper does not embed the inspected isolated MSI. Refusing to run it.' }
+}
+Write-Output 'PASS: Product, upgrade family, components, and wrapper payload are isolated and verified.'
 
 try {
     if ($SetupPath) {

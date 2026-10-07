@@ -2,8 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ExecutablePath,
     [Parameter(Mandatory = $true)][string]$OutputDir,
-    [string]$Version = '0.1.3',
-    [string]$ProductCode = '{972306CE-93D3-488F-99CF-980745F03E98}',
+    [string]$Version = '',
+    [string]$ProductCode = '',
     [string]$UpgradeCode = '{7D0BD59C-0911-48DC-87C5-8EAA89BFCED7}',
     [string]$ComponentCode = '{82025BFC-A311-4A2D-9099-A858FD8FF6E0}',
     [string]$WorkDir = '',
@@ -17,20 +17,33 @@ Set-StrictMode -Version Latest
 $ExecutablePath = (Resolve-Path -LiteralPath $ExecutablePath).Path
 $OutputDir = [IO.Path]::GetFullPath($OutputDir)
 $null = New-Item -ItemType Directory -Path $OutputDir -Force
+if ($MsiOnly -and (Test-Path -LiteralPath (Join-Path $OutputDir 'CursorCueSetup.exe'))) { throw 'Use a separate output directory for MSI-only builds to avoid leaving a stale setup wrapper.' }
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $projectParent = Split-Path -Parent $projectRoot
 $workspaceRoot = if ((Split-Path -Leaf $projectParent) -eq 'outputs') { Split-Path -Parent $projectParent } else { $projectRoot }
 if (!$WorkDir) { $WorkDir = Join-Path $workspaceRoot 'work\installer' }
 $workRoot = [IO.Path]::GetFullPath($WorkDir)
 $null = New-Item -ItemType Directory -Path $workRoot -Force
+$file = Get-Item -LiteralPath $ExecutablePath
+if (!$Version) { $Version = $file.VersionInfo.FileVersion }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be major.minor.patch; use a versioned CursorCue executable or supply -Version.' }
+$parsedVersion = [Version]$Version
+if ($parsedVersion.Major -gt 255 -or $parsedVersion.Minor -gt 255 -or $parsedVersion.Build -gt 65535) { throw 'Version exceeds Windows Installer limits.' }
+if ($file.VersionInfo.FileVersion -and $file.VersionInfo.FileVersion -ne $Version) { throw 'Executable and installer versions must match.' }
+$componentGuid = ([Guid]$ComponentCode).ToString('B').ToUpperInvariant()
+$upgradeGuid = ([Guid]$UpgradeCode).ToString('B').ToUpperInvariant()
+if (!$ProductCode) {
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { $digest = $hash.ComputeHash([Text.Encoding]::UTF8.GetBytes("CursorCue|$upgradeGuid|$Version")) }
+    finally { $hash.Dispose() }
+    $ProductCode = ([Guid]::new([byte[]]$digest[0..15])).ToString('B')
+}
+$productGuid = ([Guid]$ProductCode).ToString('B').ToUpperInvariant()
+$iconPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\assets\CursorCue.ico')).Path
+$registryKey = 'Software\CursorCue\Installer\' + $productGuid
 $stage = Join-Path $workRoot ('CursorCue-build-' + [Guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $stage
 $msiPath = Join-Path $stage 'CursorCue.msi'
-$productGuid = ([Guid]$ProductCode).ToString('B').ToUpperInvariant()
-$componentGuid = ([Guid]$ComponentCode).ToString('B').ToUpperInvariant()
-$upgradeGuid = ([Guid]$UpgradeCode).ToString('B').ToUpperInvariant()
-$iconPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\assets\CursorCue.ico')).Path
-$registryKey = 'Software\CursorCue\Installer\' + $productGuid
 
 function Invoke-ComMethod($Object, [string]$Name, [object[]]$Arguments = @()) {
     for ($i = 0; $i -lt $Arguments.Length; $i++) { $Arguments[$i] = $Arguments[$i].PSObject.BaseObject }
@@ -49,21 +62,21 @@ function Import-Table([string]$Name, [string[]]$Columns, [string[]]$Types, [stri
 
 $installer = $database = $summary = $null
 try {
-    $file = Get-Item -LiteralPath $ExecutablePath
+    Copy-Item -LiteralPath $ExecutablePath -Destination (Join-Path $stage 'cursorcue.exe')
     $ddf = @"
 .OPTION EXPLICIT
 .Set CabinetNameTemplate=payload.cab
-.Set DiskDirectoryTemplate="$stage"
+.Set DiskDirectoryTemplate=.
 .Set Cabinet=ON
 .Set Compress=ON
 .Set CompressionType=MSZIP
 .Set MaxDiskSize=0
-.Set InfFileName="$stage\payload.inf"
-.Set RptFileName="$stage\payload.rpt"
-"$ExecutablePath" CursorCueExe
+.Set InfFileName=payload.inf
+.Set RptFileName=payload.rpt
+cursorcue.exe CursorCueExe
 "@
     [IO.File]::WriteAllText((Join-Path $stage 'payload.ddf'), $ddf, [Text.Encoding]::ASCII)
-    $cabProcess = Start-Process -FilePath "$env:SystemRoot\System32\makecab.exe" -ArgumentList @('/F', ('"' + (Join-Path $stage 'payload.ddf') + '"')) -Wait -PassThru -WindowStyle Hidden
+    $cabProcess = Start-Process -FilePath "$env:SystemRoot\System32\makecab.exe" -WorkingDirectory $stage -ArgumentList @('/F', 'payload.ddf') -Wait -PassThru -WindowStyle Hidden
     if ($cabProcess.ExitCode -ne 0 -or !(Test-Path -LiteralPath (Join-Path $stage 'payload.cab'))) { throw 'Cabinet creation failed.' }
     $installer = New-Object -ComObject WindowsInstaller.Installer
     $database = Invoke-ComMethod $installer 'OpenDatabase' @($msiPath, 3)
@@ -279,7 +292,6 @@ try {
     $summary = $null
     $null = [Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
     $database = $null
-    Copy-Item -LiteralPath $msiPath -Destination (Join-Path $OutputDir 'CursorCue.msi') -Force
 
     if (!$MsiOnly) {
         $setupPath = Join-Path $stage 'CursorCueSetup.exe'
@@ -287,11 +299,11 @@ try {
             $rustCommand = Get-Command rustc.exe -ErrorAction SilentlyContinue
             $RustcPath = if ($rustCommand) { $rustCommand.Source } else { Join-Path $workRoot '..\rust\rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe' }
         }
-        if (!(Test-Path -LiteralPath $RustcPath)) { throw 'rustc is required to build the native setup wrapper. The MSI is available.' }
+        if (!(Test-Path -LiteralPath $RustcPath)) { throw 'rustc is required to build the native setup wrapper. No new artifacts were published.' }
         $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
         $sdkVersion = (Get-ChildItem -LiteralPath (Join-Path $sdkRoot 'Lib') -Directory | Sort-Object Name -Descending | Select-Object -First 1).Name
         if (!$ManifestTool) { $ManifestTool = Join-Path $sdkRoot "bin\$sdkVersion\x64\mt.exe" }
-        if (!(Test-Path -LiteralPath $ManifestTool)) { throw 'Windows SDK mt.exe is required to embed the asInvoker manifest. The MSI is available.' }
+        if (!(Test-Path -LiteralPath $ManifestTool)) { throw 'Windows SDK mt.exe is required to embed the asInvoker manifest. No new artifacts were published.' }
         $vcRoot = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC'
         $vcVersionDir = (Get-ChildItem -LiteralPath $vcRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
         $previousPath = $env:PATH
@@ -328,20 +340,39 @@ BEGIN
  END
 END
 "@
-            [IO.File]::WriteAllText($setupRc, $resourceText, [Text.Encoding]::ASCII)
-            & (Join-Path $sdkRoot "bin\$sdkVersion\x64\rc.exe") '/nologo' '/fo' $setupRes $setupRc
+            [IO.File]::WriteAllText($setupRc, $resourceText, [Text.Encoding]::UTF8)
+            & (Join-Path $sdkRoot "bin\$sdkVersion\x64\rc.exe") '/nologo' '/c65001' '/fo' $setupRes $setupRc
             if ($LASTEXITCODE -ne 0) { throw 'Setup icon resource compilation failed.' }
             & $RustcPath (Join-Path $PSScriptRoot 'bootstrapper.rs') '--edition=2021' '--target' 'x86_64-pc-windows-msvc' '-C' 'opt-level=z' '-C' 'panic=abort' '-C' 'strip=symbols' '-C' 'debuginfo=0' '-C' 'target-feature=+crt-static' '-C' "link-arg=$setupRes" '-o' $setupPath
-            if ($LASTEXITCODE -ne 0) { throw 'Native setup wrapper compilation failed. The MSI is available.' }
-            & $ManifestTool '-nologo' '-manifest' (Join-Path $PSScriptRoot 'setup.manifest') ("-outputresource:$setupPath;#1")
-            if ($LASTEXITCODE -ne 0) { throw 'Native setup manifest embedding failed. The MSI is available.' }
-            Copy-Item -LiteralPath $setupPath -Destination (Join-Path $OutputDir 'CursorCueSetup.exe') -Force
+            if ($LASTEXITCODE -ne 0) { throw 'Native setup wrapper compilation failed. No new artifacts were published.' }
+            $setupManifest = Join-Path $stage 'setup.manifest'
+            [IO.File]::WriteAllText($setupManifest, [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'setup.manifest')).Replace('version="0.0.0.0"', ('version="' + $Version + '.0"')), [Text.Encoding]::UTF8)
+            & $ManifestTool '-nologo' '-manifest' $setupManifest ("-outputresource:$setupPath;#1")
+            if ($LASTEXITCODE -ne 0) { throw 'Native setup manifest embedding failed. No new artifacts were published.' }
         }
         finally {
             $env:PATH = $previousPath
             $env:LIB = $previousLib
             $env:CURSORCUE_MSI_PATH = $previousPayload
         }
+    }
+    $publishedNames = @('CursorCue.msi')
+    if (!$MsiOnly) { $publishedNames += 'CursorCueSetup.exe' }
+    foreach ($name in $publishedNames) {
+        $destination = Join-Path $OutputDir $name
+        if (Test-Path -LiteralPath $destination) { Copy-Item -LiteralPath $destination -Destination (Join-Path $stage ('previous-' + $name)) }
+    }
+    try {
+        foreach ($name in $publishedNames) { Copy-Item -LiteralPath (Join-Path $stage $name) -Destination (Join-Path $OutputDir $name) -Force }
+    } catch {
+        foreach ($name in $publishedNames) {
+            $previous = Join-Path $stage ('previous-' + $name)
+            $destination = Join-Path $OutputDir $name
+            if (Test-Path -LiteralPath $previous) {
+                if (!(Test-Path -LiteralPath $destination) -or (Get-FileHash $previous).Hash -ne (Get-FileHash $destination).Hash) { Copy-Item -LiteralPath $previous -Destination $destination -Force }
+            } elseif (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Force }
+        }
+        throw
     }
     Get-Item -LiteralPath (Join-Path $OutputDir 'CursorCue.msi')
     if (!$MsiOnly) { Get-Item -LiteralPath (Join-Path $OutputDir 'CursorCueSetup.exe') }

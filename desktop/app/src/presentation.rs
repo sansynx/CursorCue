@@ -17,17 +17,17 @@ use windows::{
 const COPY: [(&str, usize); 9] = [
     ("CursorCue Share", 1),
     (
-        "Keep your shared cursor steady in calls, reviews and walkthroughs while your mouse keeps working.",
+        "Freeze or hide the shared cursor while your mouse keeps working.",
         0,
     ),
-    ("1. Choose your app window", 2),
+    ("1. Choose a window", 2),
     ("Select the app you want others to see.", 0),
-    ("2. Share the CursorCue window", 2),
+    ("2. Share CursorCue", 2),
     (
-        "Choose CursorCue Share as the window to share in your meeting app. Keep both windows unminimized.",
+        "In your meeting app, share the window named CursorCue Share.",
         0,
     ),
-    ("3. Work in your original app", 2),
+    ("3. Keep working", 2),
     (
         "Freeze, hide, resume or drop the shared cursor using the Tools menu or your shortcuts.",
         0,
@@ -39,7 +39,7 @@ const COPY: [(&str, usize); 9] = [
 ];
 const ACTIONS: [(u32, &str); 3] = [
     (10, "&Choose a window..."),
-    (19, "Cursor size && &shortcuts..."),
+    (19, "&Size and shortcuts..."),
     (22, "&How to use CursorCue"),
 ];
 const PAPER: COLORREF = COLORREF(0xfbf6f4);
@@ -83,6 +83,7 @@ fn fonts(dpi: u32) -> Result<[HFONT; 3]> {
     }
     Ok(fonts)
 }
+#[derive(Clone, Copy)]
 struct Layout {
     text: [RECT; 9],
     buttons: [RECT; 3],
@@ -96,9 +97,9 @@ pub struct Welcome {
     fonts: Cell<[HFONT; 3]>,
     dpi: Cell<u32>,
     offset: Cell<i32>,
-    wheel_remainder: Cell<i32>,
     live: Cell<bool>,
     laying_out: Cell<bool>,
+    layout_cache: Cell<Option<(i32, u32, Layout)>>,
     brush: HBRUSH,
 }
 impl Welcome {
@@ -111,9 +112,9 @@ impl Welcome {
             fonts: Cell::new(fonts(dpi)?),
             dpi: Cell::new(dpi),
             offset: Cell::new(0),
-            wheel_remainder: Cell::new(0),
             live: Cell::new(false),
             laying_out: Cell::new(false),
+            layout_cache: Cell::new(None),
             brush: unsafe { CreateSolidBrush(PAPER) },
         });
         unsafe {
@@ -183,6 +184,12 @@ impl Welcome {
         Ok(ui)
     }
     fn layout(&self, dc: HDC, width: i32) -> Layout {
+        if let Some((cached_width, dpi, layout)) = self.layout_cache.get()
+            && cached_width == width
+            && dpi == self.dpi.get()
+        {
+            return layout;
+        }
         let px = |n: i32| (n as f32 * self.dpi.get() as f32 / 96.0).round() as i32;
         let column = px(720).min((width - px(48)).max(1));
         let left = ((width - column) / 2).max(0);
@@ -221,16 +228,29 @@ impl Welcome {
         let mut y = layout.text[0].bottom.max(layout.logo.bottom) + px(12);
         layout.text[1] = measure(1, left, y);
         y = layout.text[1].bottom + px(20);
-        if column >= px(664) {
+        let mut button_widths = [0; 3];
+        unsafe {
+            let previous = SelectObject(dc, self.fonts.get()[0].into());
+            for (index, (_, text)) in ACTIONS.iter().enumerate() {
+                let text = wide(&text.replace('&', ""));
+                let mut extent = SIZE::default();
+                if !GetTextExtentPoint32W(dc, &text[..text.len() - 1], &mut extent).as_bool() {
+                    extent.cx = px(260);
+                }
+                button_widths[index] = (extent.cx + px(40)).max(px(180));
+            }
+            SelectObject(dc, previous);
+        }
+        if column >= button_widths.iter().sum::<i32>() + px(24) {
             let mut x = left;
-            for (index, width) in [210, 250, 160].into_iter().enumerate() {
+            for (index, width) in button_widths.into_iter().enumerate() {
                 layout.buttons[index] = RECT {
                     left: x,
                     top: y,
-                    right: x + px(width),
+                    right: x + width,
                     bottom: y + px(42),
                 };
-                x += px(width + 12);
+                x += width + px(12);
             }
             y += px(42);
         } else {
@@ -253,6 +273,7 @@ impl Welcome {
         }
         layout.text[8] = measure(8, left, y + px(4));
         layout.height = layout.text[8].bottom + px(28);
+        self.layout_cache.set(Some((width, self.dpi.get(), layout)));
         layout
     }
     pub fn resize(&self) {
@@ -293,13 +314,14 @@ impl Welcome {
                         .zip(layout.text)
                         .chain(self.buttons.iter().zip(layout.buttons))
                     {
-                        let _ = MoveWindow(
+                        let _ = SetWindowPos(
                             *window,
+                            None,
                             rect.left,
                             rect.top - offset,
                             rect.right - rect.left,
                             rect.bottom - rect.top,
-                            true,
+                            SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOCOPYBITS,
                         );
                     }
                     let mut after = RECT::default();
@@ -310,7 +332,12 @@ impl Welcome {
                 }
                 ReleaseDC(Some(self.hwnd), dc);
             }
-            let _ = InvalidateRect(Some(self.hwnd), None, true);
+            let _ = RedrawWindow(
+                Some(self.hwnd),
+                None,
+                None,
+                RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN,
+            );
         }
         self.laying_out.set(false);
     }
@@ -320,7 +347,6 @@ impl Welcome {
             let old = self.fonts.replace(fonts(dpi)?);
             self.dpi.set(dpi);
             self.offset.set(0);
-            self.wheel_remainder.set(0);
             unsafe {
                 for (index, child) in self.text.iter().enumerate() {
                     SendMessageW(
@@ -349,7 +375,6 @@ impl Welcome {
     pub fn set_live(&self, live: bool) {
         self.live.set(live);
         self.offset.set(0);
-        self.wheel_remainder.set(0);
         unsafe {
             for child in self.text.into_iter().chain(self.buttons) {
                 let _ = ShowWindow(child, if live { SW_HIDE } else { SW_SHOWNA });
@@ -362,7 +387,7 @@ impl Welcome {
             self.resize();
         }
     }
-    pub fn scroll(&self, action: i32, wheel: i32) {
+    pub fn scroll(&self, action: i32) {
         if self.live.get() {
             return;
         }
@@ -376,11 +401,7 @@ impl Welcome {
                 return;
             }
             let line = (32 * self.dpi.get() / 96) as i32;
-            let target = if wheel != 0 {
-                let delta = self.wheel_remainder.get() + wheel * line * 3;
-                self.wheel_remainder.set(delta % 120);
-                info.nPos - delta / 120
-            } else {
+            let target = {
                 match action {
                     n if n == SB_LINEUP.0 => info.nPos - line,
                     n if n == SB_LINEDOWN.0 => info.nPos + line,
@@ -392,7 +413,11 @@ impl Welcome {
                     _ => info.nPos,
                 }
             };
-            self.offset.set(target.max(0));
+            let target = target.clamp(0, (info.nMax - info.nPage as i32 + 1).max(0));
+            if target == info.nPos {
+                return;
+            }
+            self.offset.set(target);
         }
         self.resize();
     }
@@ -435,7 +460,7 @@ impl Welcome {
         unsafe {
             let mut client = RECT::default();
             let _ = GetClientRect(self.hwnd, &mut client);
-            FillRect(dc, &client, self.brush);
+            self.erase(dc);
             if !self.live.get() {
                 let rect = self.layout(dc, client.right).logo;
                 if let Ok(instance) = GetModuleHandleW(None)
@@ -461,6 +486,13 @@ impl Welcome {
                     );
                 }
             }
+        }
+    }
+    pub fn erase(&self, dc: HDC) {
+        unsafe {
+            let mut client = RECT::default();
+            let _ = GetClientRect(self.hwnd, &mut client);
+            FillRect(dc, &client, self.brush);
         }
     }
     pub fn static_color(&self, dc: HDC, child: HWND) -> HBRUSH {
