@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111d8a" />
+    <title>CursorCue</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico" sizes="any" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="header" id="header">
+      <div class="nav-shell">
+        <a class="wordmark" href="#top"
+          ><img
+            class="brand-icon"
+            src="logo.svg"
+            alt=""
+            width="24"
+            height="24"
+          />CursorCue</a
+        >
+        <nav aria-label="Main navigation">
+          <a href="#demo">Try it</a><a href="#how-it-works">How it works</a
+          ><a href="#faq">FAQ</a>
+        </nav>
+        <a class="nav-cta" href="#download">Get for Windows</a>
+      </div>
+    </header>
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">Move freely.<br />Share with focus.</h1>
+          <p>
+            Freeze or hide the cursor others see while your mouse keeps working.
+          </p>
+          <a class="button button-white" href="#download"
+            >Get CursorCue for Windows</a
+          >
+          <p class="hero-note">Windows 11 · No account · Local processing</p>
+        </div>
+        <div class="demo" id="demo">
+          <div class="presentation">
+            <div class="titlebar">
+              <span class="presentation-title"
+                ><img src="logo.svg" alt="" width="18" height="18" />CursorCue
+                Share</span
+              ><span>Interactive preview</span>
+            </div>
+            <div
+              class="canvas"
+              id="demo-workspace"
+              tabindex="0"
+              aria-label="Shared cursor preview. Move your mouse, or use the arrow keys. F freezes, H hides, and R resumes the shared cursor."
+            >
+              <div class="slide">
+                <h2>Focus on<br />the conversation.</h2>
+                <p>Keep working.<br />Keep your shared cursor still.</p>
+              </div>
+              <div
+                class="audience-cursor"
+                id="audience-pointer"
+                aria-hidden="true"
+              >
+                <span>Shared cursor</span>
+              </div>
+              <div
+                class="private-cursor"
+                id="private-pointer"
+                aria-hidden="true"
+              >
+                <span>Your mouse</span>
+              </div>
+              <div class="ripple" id="ripple" aria-hidden="true"></div>
+            </div>
+            <div class="demo-controls" aria-label="Preview controls">
+              <button data-action="freeze" aria-pressed="false">
+                Freeze <kbd>F</kbd></button
+              ><button data-action="hide" aria-pressed="false">
+                Hide <kbd>H</kbd></button
+              ><button data-action="resume" aria-pressed="true">
+                Resume <kbd>R</kbd></button
+              ><button id="reset-demo">Reset</button>
+            </div>
+            <div class="statusbar">
+              <span id="mode-label">Following your mouse</span
+              ><span>Browser simulation</span>
+            </div>
+          </div>
+          <p class="demo-caption" id="demo-caption" aria-live="polite">
+            Move your mouse inside the preview. Try Freeze.
+          </p>
+        </div>
+      </section>
+      <section class="workflow section" id="how-it-works">
+        <div class="section-heading">
+          <h2>Choose. Share. Work.</h2>
+          <p>
+            For one-on-ones with teammates or your manager, team calls, reviews,
+            and presentations.
+          </p>
+        </div>
+        <ol class="steps">
+          <li>
+            <h3>Choose your app.</h3>
+            <p>Select the app window you want to share.</p>
+          </li>
+          <li>
+            <h3>Share CursorCue.</h3>
+            <p>Share the CursorCue Share window in your meeting app.</p>
+          </li>
+          <li>
+            <h3>Keep working.</h3>
+            <p>
+              Freeze, hide, or resume from the menu or a shortcut. Change size
+              and keys in Cursor size &amp; shortcuts, then Apply.
+            </p>
+          </li>
+        </ol>
+        <p class="workflow-note">
+          Native Rust app. Windows-only. No account or cloud processing.
+        </p>
+      </section>
+      <section class="faq section" id="faq">
+        <div class="section-heading"><h2>Questions, answered.</h2></div>
+        <div class="faq-list">
+          <details>
+            <summary>How is the shared cursor different?</summary>
+            <p>
+              CursorCue captures your chosen app without its physical cursor,
+              then adds an independent shared cursor. Share the CursorCue Share
+              window instead of the original app.
+            </p>
+          </details>
+          <details>
+            <summary>Does my real mouse still work?</summary>
+            <p>
+              Yes. Freeze and hide affect the shared cursor. Your physical mouse
+              keeps moving and clicking normally in the original app.
+            </p>
+          </details>
+          <details>
+            <summary>Which Windows versions are supported?</summary>
+            <p>
+              Windows 11 is the primary target. Windows 10 version 2004 or newer
+              is best-effort. This version is Windows-only and focuses on
+              selected-window sharing.
+            </p>
+          </details>
+          <details>
+            <summary>Is this ready for everyday calls?</summary>
+            <p>
+              This is a developer preview. Meeting-app compatibility, mixed-DPI
+              behavior, and long-session performance still need validation. The
+              verified Windows build is available below.
+            </p>
+          </details>
+        </div>
+      </section>
+      <section class="download section" id="download">
+        <h2>Your next call.<br />A calmer cursor.</h2>
+        <a
+          class="button button-blue"
+          id="download-build"
+          href="downloads/CursorCueSetup.exe"
+          download
+          >Download for Windows</a
+        >
+        <p id="build-status">
+          Developer preview 0.1.3 · Windows x64 · Unsigned
+        </p>
+        <div class="download-alternatives">
+          <a href="downloads/CursorCue.exe" download>Portable version</a>
+          <a href="downloads/CursorCue.msi" download>MSI installer</a>
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <a class="wordmark" href="#top"
+        ><img
+          class="brand-icon"
+          src="logo.svg"
+          alt=""
+          width="24"
+          height="24"
+        />CursorCue</a
+      ><span>© 2026 · Made for Windows</span>
+    </footer>
+  </body>
+</html>

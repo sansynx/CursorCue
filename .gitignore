@@ -1,0 +1,10 @@
+target/
+node_modules/
+website/dist/downloads/
+*.exe
+*.msi
+*.pdb
+*.zip
+.env
+.env.*
+!.env.example

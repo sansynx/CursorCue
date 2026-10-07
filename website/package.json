@@ -1,0 +1,10 @@
+{
+  "name": "cursorcue-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check dist/app.js && node --check dist/demo-core.js && node --check dist/scroll.js"
+  }
+}
