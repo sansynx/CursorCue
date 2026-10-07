@@ -987,15 +987,16 @@ struct NativeResources {
 }
 impl NativeResources {
     fn restore_tray_if_needed(&self) {
+        // SAFETY: the retained icon data belongs to this UI thread and remains live for the call.
+        self.restore_tray_with(|tray| unsafe { Shell_NotifyIconW(NIM_ADD, tray).as_bool() });
+    }
+    fn restore_tray_with(&self, register: impl FnOnce(&NOTIFYICONDATAW) -> bool) {
         if !TRAY_RESTORE_PENDING.swap(false, Ordering::Relaxed) {
             return;
         }
         // SAFETY: the retained icon data and main window belong to this UI thread.
         unsafe {
-            let available = self
-                .tray
-                .as_ref()
-                .is_some_and(|tray| Shell_NotifyIconW(NIM_ADD, tray).as_bool());
+            let available = self.tray.as_ref().is_some_and(register);
             TRAY_AVAILABLE.store(available, Ordering::Relaxed);
             if !available {
                 let _ = ShowWindow(self.hwnd, SW_RESTORE);
@@ -1537,20 +1538,20 @@ mod tests {
             hotkeys: vec![],
             tray: Some(NOTIFYICONDATAW {
                 cbSize: size_of::<NOTIFYICONDATAW>() as u32,
+                hWnd: window.0,
                 uID: 1,
                 ..Default::default()
             }),
             fixture: None,
             welcome: None,
         };
-        // SAFETY: the invalid icon owner forces registration failure without altering other tray icons.
+        // SAFETY: message handling and visibility checks operate only on this test-owned window.
         unsafe {
-            assert!(!Shell_NotifyIconW(NIM_ADD, resources.tray.as_ref().unwrap()).as_bool());
             assert!(!IsWindowVisible(window.0).as_bool());
             let restart = RegisterWindowMessageW(w!("TaskbarCreated"));
             assert_ne!(restart, 0);
             window_proc(window.0, restart, WPARAM(0), LPARAM(0));
-            resources.restore_tray_if_needed();
+            resources.restore_tray_with(|_| false);
             assert!(
                 IsWindowVisible(window.0).as_bool(),
                 "Tools and Quit must remain reachable when the tray cannot be restored"
