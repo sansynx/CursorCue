@@ -52,25 +52,38 @@ If another app uses a shortcut, choose a different combination or clear its key 
 
 ## Build and check
 
-Use Windows with Rust, Visual Studio 2022 Build Tools with Desktop C++ tools, the Windows SDK, and PowerShell 7. For the website, use Node.js and pnpm. No JavaScript runtime dependencies are required.
+The desktop app builds on Windows x64. Install:
 
-From a Developer PowerShell terminal:
+- [Rust through rustup](https://rust-lang.org/tools/install/) with the stable `x86_64-pc-windows-msvc` toolchain, Rustfmt, and Clippy.
+- [Visual Studio 2022 C++ Build Tools](https://learn.microsoft.com/en-us/windows/dev-environment/rust/setup) with **Desktop development with C++** and a Windows 10 or 11 SDK, including the x64 tools and libraries.
+- [PowerShell 7](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows).
+- For website work, [Node.js 24](https://nodejs.org/en/download) and [pnpm 10](https://pnpm.io/installation), matching CI. The website has no JavaScript runtime dependencies.
+
+Open Developer PowerShell, clone the repository, and run the app. If contributing, clone your GitHub fork instead of the upstream repository shown here.
 
 ```powershell
-cd desktop
-./assets/build-icon.ps1
+git clone https://github.com/sansynx/CursorCue.git
+cd CursorCue/desktop
+cargo run -p cursorcue
+```
+
+Quit CursorCue through the Tools menu or tray before running the checks and packaging a release. From `desktop`:
+
+```powershell
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace -- --test-threads=1
-cargo build --release --workspace
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace -- --test-threads=1
+cargo build --locked --release --workspace
 ./installer/build-installer.ps1 -ExecutablePath ./target/release/cursorcue.exe -OutputDir ../release
 ```
+
+The icon is already included. Regenerate it with `./assets/build-icon.ps1` when changing the logo. Native UI and capture checks need a Windows desktop session.
 
 The Cargo workspace version controls executable and installer version metadata. Each release gets a distinct product identity within the same upgrade family. The Windows CRT is linked statically. Published packages come from CI with local build paths removed.
 
 ```powershell
 cd ../website
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run check
 pnpm run test
 pnpm run dev
@@ -90,7 +103,28 @@ Installer lifecycle tests must use isolated product, upgrade, and component GUID
 
 ## Contributing
 
-Open a pull request against `main`. Contributions require owner review and passing website, Windows, installer, and secret checks. GitHub Actions runs with read-only permissions. Only the repository owner can bypass the pull request checks; force pushes and branch deletion are blocked.
+1. Fork the repository on GitHub and clone your fork.
+2. Create a branch for your change with `git switch -c your-change`.
+3. Make the change and run the relevant checks above. Keep changes focused and include a regression test for behavior fixes.
+4. Push the branch to your fork and open a pull request against `sansynx/CursorCue:main`. Describe the change and the checks you ran. For capture or UI changes, include the Windows version, display scaling, and any multi-monitor checks.
+
+Contributions require owner review and passing website, Windows, installer, and secret checks. External contributors' CI runs require maintainer approval. GitHub Actions runs with read-only permissions. Only the repository owner can bypass the pull request checks; force pushes and branch deletion are blocked. The checks are defined in [the CI workflow](.github/workflows/ci.yml).
+
+### Where to make changes
+
+| Path                                                                               | Responsibility                                                                                |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [desktop/app/src](desktop/app/src)                                                 | Windows app lifecycle, tray, shortcuts, main window, and settings UI.                         |
+| [cursorcue-core](desktop/crates/cursorcue-core/src/lib.rs)                         | Cursor state, freezing, visibility, smoothing, and coordinates.                               |
+| [cursorcue-config](desktop/crates/cursorcue-config)                                | Settings validation, persistence, recovery, and configuration tests.                          |
+| [cursorcue-platform-windows](desktop/crates/cursorcue-platform-windows/src/lib.rs) | Windows Graphics Capture sessions and frame delivery.                                         |
+| [cursorcue-render](desktop/crates/cursorcue-render/src)                            | Direct3D 11 compositing, cursor drawing, and the HLSL shader.                                 |
+| [desktop/installer](desktop/installer)                                             | MSI builder, setup wrapper, and isolated install/uninstall tests.                             |
+| [website](website)                                                                 | Authored HTML, CSS, and JavaScript in `dist`, the local server, and browser simulation tests. |
+
+Cargo build output in `target/`, local caches, credentials, installers, and temporary files are ignored. Keep `desktop/Cargo.lock`, `website/pnpm-lock.yaml`, and `desktop/.cargo/config.toml` committed so contributors use consistent dependencies and build settings.
+
+For a bug report, [open an issue](https://github.com/sansynx/CursorCue/issues) with steps to reproduce, expected and actual behavior, the app version, Windows version, and relevant display or meeting-app details. Remove private content from screenshots and logs.
 
 ## License
 

@@ -31,3 +31,7 @@ Desktop.ini
 .npmrc
 .netrc
 **/.cargo/credentials*
+**/.cargo/registry/
+**/.cargo/git/
+**/.rustup/
+*.rs.bk
