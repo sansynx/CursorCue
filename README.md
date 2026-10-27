@@ -10,7 +10,7 @@
   <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.7/CursorCue.msi">Download MSI</a> ·
   <a href="https://github.com/sansynx/CursorCue/releases/download/v0.1.7/CursorCue.exe">Download portable EXE</a>
 </p>
-<p align="center"><img src="docs/assets/website-hero.png" alt="CursorCue website hero with an interactive shared cursor preview" width="960" /></p>
+<p align="center"><img src="docs/assets/website-hero.png" alt="CursorCue landing page with a centered headline and Windows download" width="960" /></p>
 
 ## Downloads
 
@@ -85,7 +85,6 @@ The Cargo workspace version controls executable and installer version metadata. 
 cd ../website
 pnpm install --frozen-lockfile
 pnpm run check
-pnpm run test
 pnpm run dev
 ```
 
@@ -114,15 +113,15 @@ Contributions require owner review and passing website, Windows, installer, and 
 
 ### Where to make changes
 
-| Path                                                                               | Responsibility                                                                                |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [desktop/app/src](desktop/app/src)                                                 | Windows app lifecycle, tray, shortcuts, main window, and settings UI.                         |
-| [cursorcue-core](desktop/crates/cursorcue-core/src/lib.rs)                         | Cursor state, freezing, visibility, smoothing, and coordinates.                               |
-| [cursorcue-config](desktop/crates/cursorcue-config)                                | Settings validation, persistence, recovery, and configuration tests.                          |
-| [cursorcue-platform-windows](desktop/crates/cursorcue-platform-windows/src/lib.rs) | Windows Graphics Capture sessions and frame delivery.                                         |
-| [cursorcue-render](desktop/crates/cursorcue-render/src)                            | Direct3D 11 compositing, cursor drawing, and the HLSL shader.                                 |
-| [desktop/installer](desktop/installer)                                             | MSI builder, setup wrapper, and isolated install/uninstall tests.                             |
-| [website](website)                                                                 | Authored HTML, CSS, and JavaScript in `dist`, the local server, and browser simulation tests. |
+| Path                                                                               | Responsibility                                                        |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [desktop/app/src](desktop/app/src)                                                 | Windows app lifecycle, tray, shortcuts, main window, and settings UI. |
+| [cursorcue-core](desktop/crates/cursorcue-core/src/lib.rs)                         | Cursor state, freezing, visibility, smoothing, and coordinates.       |
+| [cursorcue-config](desktop/crates/cursorcue-config)                                | Settings validation, persistence, recovery, and configuration tests.  |
+| [cursorcue-platform-windows](desktop/crates/cursorcue-platform-windows/src/lib.rs) | Windows Graphics Capture sessions and frame delivery.                 |
+| [cursorcue-render](desktop/crates/cursorcue-render/src)                            | Direct3D 11 compositing, cursor drawing, and the HLSL shader.         |
+| [desktop/installer](desktop/installer)                                             | MSI builder, setup wrapper, and isolated install/uninstall tests.     |
+| [website](website)                                                                 | Static HTML, CSS, and assets in `dist`, plus the local server.        |
 
 Cargo build output in `target/`, local caches, credentials, installers, and temporary files are ignored. Keep `desktop/Cargo.lock`, `website/pnpm-lock.yaml`, and `desktop/.cargo/config.toml` committed so contributors use consistent dependencies and build settings.
 
