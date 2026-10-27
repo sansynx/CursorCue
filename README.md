@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="desktop/assets/logo.png" width="72" height="72" alt="CursorCue logo" />
+  <img src="website/dist/favicon.svg" width="72" height="72" alt="CursorCue logo" />
 </p>
 <h1 align="center">CursorCue</h1>
 <p align="center">Control the cursor others see while your mouse keeps working.</p>
