@@ -15,9 +15,6 @@ try {
             $graphics.DrawImage($source, [Drawing.Rectangle]::new(0, 0, $size, $size))
             $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
             $images.Add($stream.ToArray())
-            if ($size -eq 256) {
-                [IO.File]::WriteAllBytes((Join-Path $PSScriptRoot '../../website/dist/logo.png'), $stream.ToArray())
-            }
         } finally { $stream.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
     }
 } finally { $source.Dispose() }
@@ -36,4 +33,3 @@ try {
     }
     foreach ($bytes in $images) { $writer.Write($bytes) }
 } finally { $writer.Dispose(); $output.Dispose() }
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CursorCue.ico') -Destination (Join-Path $PSScriptRoot '../../website/dist/favicon.ico') -Force

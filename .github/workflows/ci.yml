@@ -34,8 +34,8 @@ jobs:
           node-version: 24
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
-      - run: pnpm run test
-      - run: pnpm dlx prettier@3.6.2 --check ../AGENTS.md ../README.md ../.github/workflows/ci.yml package.json server.mjs "dist/*.html" "dist/*.css" "dist/*.js" "tests/*.mjs"
+      - run: pnpm dlx prettier@3.6.2 --check ../AGENTS.md ../README.md ../.github/workflows/ci.yml package.json server.mjs "dist/*.html" "dist/*.css"
+      - run: pnpm dlx prettier@3.6.2 --parser html --check dist/favicon.svg
 
   windows:
     name: Windows checks

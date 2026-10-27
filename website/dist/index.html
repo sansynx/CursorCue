@@ -3,206 +3,66 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#111d8a" />
+    <meta name="theme-color" content="#20272b" />
     <title>CursorCue</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" sizes="any" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&amp;family=Public+Sans:wght@400;500;600&amp;display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap"
     />
     <link rel="stylesheet" href="styles.css" />
-    <script type="module" src="app.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
-    <header class="header" id="header">
+    <header class="header">
       <div class="nav-shell">
-        <a class="wordmark" href="#top"
-          ><img
-            class="brand-icon"
-            src="logo.png"
-            alt=""
-            width="24"
-            height="24"
-          />CursorCue</a
+        <a class="wordmark" href="./" aria-label="CursorCue home"
+          ><img src="favicon.svg" alt="" width="28" height="28" />CursorCue</a
         >
         <nav aria-label="Main navigation">
-          <a href="#demo">Try it</a><a href="#how-it-works">How it works</a
-          ><a href="#faq">FAQ</a>
+          <a class="github-link" href="https://github.com/sansynx/CursorCue"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+          <a
+            class="nav-download"
+            href="https://github.com/sansynx/CursorCue/releases/download/v0.1.7/CursorCueSetup.exe"
+            >Download <span aria-hidden="true">↓</span></a
+          >
         </nav>
-        <a class="nav-cta" href="#download">Get for Windows</a>
       </div>
     </header>
     <main id="main">
-      <section class="hero" id="top" aria-labelledby="hero-title">
+      <section class="hero" aria-labelledby="hero-title">
+        <img
+          class="hero-background"
+          src="hero-cursor.png"
+          alt=""
+          width="1672"
+          height="941"
+          fetchpriority="high"
+        />
         <div class="hero-copy">
-          <h1 id="hero-title">Move freely.<br />Share with focus.</h1>
-          <p>
-            Freeze or hide the cursor others see while your mouse keeps working.
+          <h1 id="hero-title">
+            <span class="headline-line">Move freely</span
+            ><em class="headline-line">Share with focus</em>
+          </h1>
+          <p class="hero-description">
+            Freeze or hide your shared cursor<br class="desktop-break" />
+            while your mouse keeps working
           </p>
-          <a class="button button-white" href="#download"
-            >Get CursorCue for Windows</a
-          >
-          <p class="hero-note">Windows 11 · Local processing</p>
-        </div>
-        <div class="demo" id="demo">
-          <div class="presentation">
-            <div class="titlebar">
-              <span class="presentation-title"
-                ><img src="logo.png" alt="" width="18" height="18" />CursorCue
-                Share</span
-              ><span>Interactive preview</span>
-            </div>
-            <div
-              class="canvas"
-              id="demo-workspace"
-              tabindex="0"
-              aria-label="Shared cursor preview. Move your mouse, or use the arrow keys. F freezes, H hides, and R resumes the shared cursor."
-            >
-              <div class="slide">
-                <h2>Focus on<br />the conversation.</h2>
-                <p>Keep working.<br />Keep your shared cursor still.</p>
-              </div>
-              <div
-                class="audience-cursor"
-                id="audience-pointer"
-                aria-hidden="true"
-              >
-                <span>Shared cursor</span>
-              </div>
-              <div
-                class="private-cursor"
-                id="private-pointer"
-                aria-hidden="true"
-              >
-                <span>Your mouse</span>
-              </div>
-              <div class="ripple" id="ripple" aria-hidden="true"></div>
-            </div>
-            <div class="demo-controls" aria-label="Preview controls">
-              <button data-action="freeze" aria-pressed="false">
-                Freeze <kbd>F</kbd></button
-              ><button data-action="hide" aria-pressed="false">
-                Hide <kbd>H</kbd></button
-              ><button data-action="resume" aria-pressed="true">
-                Resume <kbd>R</kbd></button
-              ><button id="reset-demo">Reset</button>
-            </div>
-            <div class="statusbar">
-              <span id="mode-label">Following your mouse</span
-              ><span>Browser simulation</span>
-            </div>
-          </div>
-          <p class="demo-caption" id="demo-caption" aria-live="polite">
-            Move your mouse inside the preview. Try Freeze.
-          </p>
-        </div>
-      </section>
-      <section class="workflow section" id="how-it-works">
-        <div class="section-heading">
-          <h2>How it works</h2>
-          <p>
-            For one-on-ones with teammates or your manager, team calls, reviews,
-            and presentations.
-          </p>
-        </div>
-        <ol class="steps">
-          <li>
-            <h3>Choose a window</h3>
-            <p>Open CursorCue and choose the app window you want to share.</p>
-          </li>
-          <li>
-            <h3>Share CursorCue</h3>
-            <p>
-              In Google Meet, Teams or Zoom, share the window named CursorCue
-              Share.
-            </p>
-          </li>
-          <li>
-            <h3>Keep working</h3>
-            <p>
-              Use the Tools menu or your shortcuts to freeze, hide, resume or
-              drop the shared cursor. Your real mouse keeps moving in the
-              original app.
-            </p>
-          </li>
-        </ol>
-        <p class="workflow-note">
-          Change cursor size and keys in Tools → Cursor size &amp; shortcuts,
-          then Apply.
-        </p>
-      </section>
-      <section class="faq section" id="faq">
-        <div class="section-heading"><h2>Questions, answered.</h2></div>
-        <div class="faq-list">
-          <details>
-            <summary>How is the shared cursor different?</summary>
-            <p>
-              CursorCue captures your chosen app without its physical cursor,
-              then adds an independent shared cursor. Share the CursorCue Share
-              window instead of the original app.
-            </p>
-          </details>
-          <details>
-            <summary>Does my real mouse still work?</summary>
-            <p>
-              Yes. Freeze and hide affect the shared cursor. Your physical mouse
-              keeps moving and clicking normally in the original app.
-            </p>
-          </details>
-          <details>
-            <summary>Which Windows versions are supported?</summary>
-            <p>
-              CursorCue runs on 64-bit Windows 11 and Windows 10 version 2004 or
-              later. Share one selected application window.
-            </p>
-          </details>
-          <details>
-            <summary>How do I share CursorCue in a meeting?</summary>
-            <p>
-              In Google Meet, Teams or Zoom, choose to share a window and select
-              CursorCue Share. Keep CursorCue and your source window open and
-              unminimized, then continue working in the original app.
-            </p>
-          </details>
-        </div>
-      </section>
-      <section class="download section" id="download">
-        <h2>Your next call.<br />A calmer cursor.</h2>
-        <a
-          class="button button-blue"
-          id="download-build"
-          href="https://github.com/sansynx/CursorCue/releases/download/v0.1.7/CursorCueSetup.exe"
-          >Download for Windows</a
-        >
-        <p id="build-status">Version 0.1.7 · Windows x64 · Unsigned</p>
-        <p class="workflow-note">
-          Choose the installer for guided setup or run the portable version.
-        </p>
-        <div class="download-alternatives">
           <a
-            href="https://github.com/sansynx/CursorCue/releases/download/v0.1.7/CursorCue.exe"
-            >Portable version</a
+            class="download-button"
+            href="https://github.com/sansynx/CursorCue/releases/download/v0.1.7/CursorCueSetup.exe"
+            >Download for Windows <span aria-hidden="true">↓</span></a
           >
-          <a
-            href="https://github.com/sansynx/CursorCue/releases/download/v0.1.7/CursorCue.msi"
-            >MSI installer</a
-          >
+          <p class="download-note">
+            Windows x64 · Version 0.1.7 · Unsigned EXE
+          </p>
         </div>
       </section>
     </main>
-    <footer class="footer">
-      <a class="wordmark" href="#top"
-        ><img
-          class="brand-icon"
-          src="logo.png"
-          alt=""
-          width="24"
-          height="24"
-        />CursorCue</a
-      ><span>© 2026 · Made for Windows</span>
-    </footer>
   </body>
 </html>

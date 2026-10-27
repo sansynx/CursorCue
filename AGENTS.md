@@ -37,9 +37,8 @@ CursorCue is a Windows app that lets users freeze, hide, resume, or reposition t
 | `desktop/crates/cursorcue-render`                     | Direct3D 11 composition, cursor geometry, GPU resources, and `src/composite.hlsl`.                                 |
 | `desktop/installer`                                   | MSI generation, native setup wrapper, manifests, and isolated lifecycle tests.                                     |
 | `desktop/assets`                                      | Canonical logo, desktop icon, and the icon generation script.                                                      |
-| `website/dist`                                        | Authored HTML, CSS, JavaScript, logo, and favicon. This directory is source and must remain tracked.               |
+| `website/dist`                                        | Authored HTML, CSS, background image, and favicon. This directory is source and must remain tracked.               |
 | `website/server.mjs`                                  | Local static server, bound to `127.0.0.1`, with default port 4173.                                                 |
-| `website/tests`                                       | Node tests for the browser cursor simulation and smooth scrolling.                                                 |
 | `docs/assets`                                         | The website hero screenshot used by the README.                                                                    |
 | `.github`                                             | CI and code ownership. Repository rulesets are configured in GitHub settings.                                      |
 
@@ -85,19 +84,19 @@ From `website`:
 ```powershell
 pnpm install --frozen-lockfile
 pnpm run check
-pnpm run test
 pnpm run dev
 ```
 
-Open `http://127.0.0.1:4173/`. The website is plain HTML, CSS, and JavaScript with no runtime dependencies. There is no bundler, React app, or `build` script. Do not invent lint, typecheck, or build commands that are absent from `package.json`.
+Open `http://127.0.0.1:4173/`. The website is plain HTML and CSS with no browser JavaScript or runtime dependencies. There is no bundler, React app, or `build` script. Do not invent lint, typecheck, or build commands that are absent from `package.json`.
 
 Use Prettier 3.6.2 for supported files, matching CI. From `website`, the full formatting check is:
 
 ```powershell
-pnpm dlx prettier@3.6.2 --check ../AGENTS.md ../README.md ../.github/workflows/ci.yml package.json server.mjs "dist/*.html" "dist/*.css" "dist/*.js" "tests/*.mjs"
+pnpm dlx prettier@3.6.2 --check ../AGENTS.md ../README.md ../.github/workflows/ci.yml package.json server.mjs "dist/*.html" "dist/*.css"
+pnpm dlx prettier@3.6.2 --parser html --check dist/favicon.svg
 ```
 
-For small changes, format and inspect only affected files. Verify layout and interaction changes in the browser, including narrow viewports, keyboard access, and reduced-motion behavior when relevant. The browser demo is a simulation and must be described accordingly.
+For small changes, format and inspect only affected files. Verify layout and interaction changes in the browser, including narrow viewports, keyboard access, and reduced-motion behavior when relevant. The landing page has one hero and a direct Windows EXE download.
 
 ## Runtime constraints to preserve
 
@@ -136,8 +135,8 @@ Published packages come from the successful CI build for the release commit. CI 
 
 - Read the workspace version from `desktop/Cargo.toml`. Keep executable, MSI, setup wrapper, README, and website release versions consistent when preparing a release.
 - Do not rewrite published tags or publish untested binaries. Build success and code signing are separate facts; current packages are unsigned.
-- For logo changes, run `desktop/assets/build-icon.ps1` on Windows. It updates `desktop/assets/CursorCue.ico`, `website/dist/logo.png`, and `website/dist/favicon.ico` from the canonical `desktop/assets/logo.png`.
-- Keep the website's existing minimal design, shared branding, readable instructions, white initial navbar, and blue navbar after scrolling.
+- For desktop logo changes, run `desktop/assets/build-icon.ps1` on Windows. It updates `desktop/assets/CursorCue.ico` from the canonical `desktop/assets/logo.png`. Website branding uses `website/dist/favicon.svg`; keep its ICO fallback in sync.
+- Keep the website as a single hero with a centered serif headline, a generated cursor background, and a direct Windows EXE download. Navigation overlays the image.
 
 ## Change quality and validation
 
